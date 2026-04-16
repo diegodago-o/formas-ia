@@ -1,0 +1,84 @@
+.loading, .empty { text-align: center; padding: 48px; color: var(--text-muted); }
+.empty span { font-size: 3rem; display: block; margin-bottom: 12px; }
+.count { font-size: 0.88rem; color: var(--text-muted); margin-bottom: 16px; }
+
+.list { display: flex; flex-direction: column; gap: 16px; }
+
+.card {
+  background: var(--surface);
+  border-radius: var(--radius);
+  padding: 16px;
+  box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border-left: 4px solid var(--warning);
+}
+
+.cardHeader { display: flex; justify-content: space-between; align-items: center; }
+.tipo { font-weight: 700; font-size: 1rem; }
+
+.confianza {
+  font-size: 0.75rem;
+  font-weight: 700;
+  border-radius: 6px;
+  padding: 3px 10px;
+  text-transform: uppercase;
+}
+.confianza.alta  { background: #D1FAE5; color: #065F46; }
+.confianza.media { background: #FEF3C7; color: #92400E; }
+.confianza.baja  { background: #FEE2E2; color: #991B1B; }
+
+.info { display: flex; flex-direction: column; gap: 3px; font-size: 0.83rem; color: var(--text-muted); }
+
+.foto {
+  width: 100%;
+  max-height: 220px;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+}
+
+.readings { display: flex; flex-direction: column; gap: 6px; font-size: 0.88rem; }
+.readings code { background: var(--bg); padding: 2px 8px; border-radius: 4px; font-size: 0.95rem; }
+.nota { font-size: 0.8rem; color: var(--warning); background: #FFFBEB; border-radius: 6px; padding: 6px 10px; }
+
+.editRow { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.editRow input {
+  flex: 1;
+  min-width: 140px;
+  padding: 10px 12px;
+  border: 1.5px solid var(--accent);
+  border-radius: var(--radius-sm);
+  font-size: 1rem;
+  outline: none;
+}
+.saveBtn {
+  background: var(--success);
+  color: #fff;
+  border-radius: var(--radius-sm);
+  padding: 10px 16px;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+.saveBtn:disabled { opacity: 0.5; }
+.cancelBtn {
+  background: transparent;
+  color: var(--text-muted);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  font-size: 0.9rem;
+}
+
+.reviewBtn {
+  background: var(--bg);
+  color: var(--primary);
+  border: 1.5px solid var(--primary);
+  border-radius: var(--radius-sm);
+  padding: 10px 16px;
+  font-weight: 600;
+  font-size: 0.9rem;
+  align-self: flex-start;
+  transition: background 0.15s;
+}
+.reviewBtn:hover { background: #EFF6FF; }

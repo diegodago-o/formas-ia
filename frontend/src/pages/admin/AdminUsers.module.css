@@ -1,0 +1,40 @@
+.flash { background: #D1FAE5; color: #065F46; border-radius: var(--radius-sm); padding: 10px 14px; font-size: 0.88rem; margin-bottom: 16px; }
+
+.addCard {
+  background: var(--surface); border-radius: var(--radius);
+  padding: 18px; margin-bottom: 20px; box-shadow: var(--shadow);
+}
+.addCard h3 { font-size: 0.9rem; color: var(--text-muted); margin-bottom: 14px; text-transform: uppercase; letter-spacing: 0.5px; }
+
+.form { display: flex; flex-direction: column; gap: 8px; }
+.form input, .form select {
+  padding: 11px 13px; border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm); font-size: 0.95rem;
+  background: var(--bg); outline: none;
+}
+.form input:focus, .form select:focus { border-color: var(--accent); background: var(--surface); }
+.form button {
+  background: var(--primary); color: #fff;
+  border-radius: var(--radius-sm); padding: 12px;
+  font-size: 0.95rem; font-weight: 600; margin-top: 4px;
+}
+
+.list { display: flex; flex-direction: column; gap: 10px; }
+
+.userCard {
+  background: var(--surface); border-radius: var(--radius);
+  padding: 14px 16px; box-shadow: var(--shadow);
+  display: flex; justify-content: space-between; align-items: center;
+}
+.userCard.inactive { opacity: 0.55; }
+
+.userName  { font-weight: 600; margin-bottom: 3px; }
+.userMeta  { font-size: 0.82rem; color: var(--text-muted); }
+.rol       { font-weight: 700; color: var(--primary); }
+
+.toggleBtn {
+  border-radius: 20px; padding: 6px 14px; font-size: 0.8rem; font-weight: 600;
+  background: var(--bg); color: var(--text-muted); border: 1.5px solid var(--border);
+  transition: all 0.15s;
+}
+.toggleBtn.active { background: #D1FAE5; color: #065F46; border-color: #6EE7B7; }

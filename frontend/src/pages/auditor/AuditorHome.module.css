@@ -1,0 +1,33 @@
+.welcome {
+  background: var(--primary);
+  color: #fff;
+  border-radius: var(--radius);
+  padding: 20px;
+  margin-bottom: 20px;
+}
+
+.greeting { font-size: 1.3rem; font-weight: 700; margin-bottom: 4px; }
+.date { font-size: 0.85rem; opacity: 0.8; text-transform: capitalize; }
+
+.actions { display: flex; flex-direction: column; gap: 14px; }
+
+.card {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  background: var(--surface);
+  border-radius: var(--radius);
+  padding: 20px;
+  box-shadow: var(--shadow);
+  text-align: left;
+  transition: transform 0.15s, box-shadow 0.15s;
+  width: 100%;
+}
+.card:active { transform: scale(0.98); }
+
+.card.primary { background: var(--accent); color: #fff; }
+.card.primary .cardDesc { color: rgba(255,255,255,0.8); }
+
+.icon { font-size: 2rem; flex-shrink: 0; }
+.cardTitle { font-size: 1rem; font-weight: 700; margin-bottom: 3px; }
+.cardDesc { font-size: 0.82rem; color: var(--text-muted); }

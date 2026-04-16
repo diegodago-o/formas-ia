@@ -1,0 +1,42 @@
+.flash {
+  background: #D1FAE5; color: #065F46;
+  border-radius: var(--radius-sm); padding: 10px 14px;
+  font-size: 0.88rem; margin-bottom: 16px;
+}
+
+.tabs { display: flex; gap: 6px; margin-bottom: 20px; }
+.tab {
+  flex: 1; padding: 10px; border-radius: var(--radius-sm);
+  font-size: 0.88rem; font-weight: 600;
+  background: var(--surface); color: var(--text-muted);
+  border: 1.5px solid var(--border); transition: all 0.15s;
+}
+.tab.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+
+.section { display: flex; flex-direction: column; gap: 16px; }
+
+.addRow, .addForm { display: flex; flex-direction: column; gap: 8px; }
+.addRow { flex-direction: row; }
+.addRow input { flex: 1; }
+
+.addRow input, .addForm input, .addForm select {
+  padding: 11px 13px; border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm); font-size: 0.95rem;
+  background: var(--surface); outline: none;
+}
+.addRow input:focus, .addForm input:focus, .addForm select:focus { border-color: var(--accent); }
+
+.addBtn {
+  background: var(--primary); color: #fff;
+  border-radius: var(--radius-sm); padding: 11px 18px;
+  font-size: 0.9rem; font-weight: 600; white-space: nowrap;
+}
+
+.list { display: flex; flex-direction: column; gap: 6px; }
+.item {
+  background: var(--surface); border-radius: var(--radius-sm);
+  padding: 12px 14px; font-size: 0.9rem;
+  display: flex; flex-direction: column; gap: 2px;
+  box-shadow: var(--shadow);
+}
+.item span { font-size: 0.8rem; color: var(--text-muted); }

@@ -1,0 +1,95 @@
+.shell { display: flex; min-height: 100vh; }
+
+/* Sidebar */
+.sidebar {
+  width: 260px;
+  background: var(--primary);
+  color: #fff;
+  display: flex;
+  flex-direction: column;
+  position: fixed;
+  top: 0; left: 0; bottom: 0;
+  z-index: 200;
+  transform: translateX(-100%);
+  transition: transform 0.25s ease;
+}
+.sidebar.open { transform: translateX(0); }
+
+@media (min-width: 900px) {
+  .sidebar { transform: translateX(0); position: sticky; height: 100vh; top: 0; }
+  .content  { margin-left: 0; }
+  .menuBtn  { display: none; }
+  .overlay  { display: none !important; }
+}
+
+.overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.4);
+  z-index: 199;
+}
+
+.sideHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 16px;
+  border-bottom: 1px solid rgba(255,255,255,0.1);
+}
+.logo { font-size: 1.2rem; font-weight: 700; letter-spacing: 0.5px; }
+.closeBtn { background: transparent; color: #fff; font-size: 1.1rem; padding: 4px; }
+
+.userInfo {
+  padding: 16px;
+  border-bottom: 1px solid rgba(255,255,255,0.1);
+}
+.userName  { font-weight: 600; margin-bottom: 2px; }
+.userRole  { font-size: 0.78rem; opacity: 0.7; }
+
+.nav { flex: 1; padding: 12px 8px; display: flex; flex-direction: column; gap: 4px; }
+
+.navItem {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: transparent;
+  color: rgba(255,255,255,0.8);
+  border-radius: 8px;
+  padding: 11px 12px;
+  font-size: 0.92rem;
+  text-align: left;
+  transition: background 0.15s, color 0.15s;
+  width: 100%;
+}
+.navItem:hover  { background: rgba(255,255,255,0.1); color: #fff; }
+.navItem.active { background: rgba(255,255,255,0.2); color: #fff; font-weight: 600; }
+
+.logoutBtn {
+  margin: 12px 8px;
+  background: rgba(255,255,255,0.08);
+  color: rgba(255,255,255,0.7);
+  border-radius: 8px;
+  padding: 11px 14px;
+  font-size: 0.88rem;
+  text-align: left;
+  transition: background 0.15s;
+}
+.logoutBtn:hover { background: rgba(255,255,255,0.15); }
+
+/* Contenido */
+.content { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+
+.topbar {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 14px 20px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+.menuBtn { background: transparent; font-size: 1.3rem; color: var(--text); padding: 4px; }
+.topTitle { font-size: 1rem; font-weight: 700; }
+
+.main { padding: 20px; flex: 1; }

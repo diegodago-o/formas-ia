@@ -1,0 +1,39 @@
+.heading { font-size: 1.2rem; font-weight: 700; margin-bottom: 20px; }
+
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 28px; }
+
+.card {
+  background: var(--card-color, var(--primary));
+  color: #fff;
+  border-radius: var(--radius);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  box-shadow: var(--shadow);
+  transition: opacity 0.2s, transform 0.15s;
+  text-align: left;
+}
+.card:hover  { opacity: 0.92; }
+.card:active { transform: scale(0.97); }
+
+.cardIcon  { font-size: 1.6rem; }
+.cardValue { font-size: 2rem; font-weight: 800; line-height: 1; }
+.cardLabel { font-size: 0.8rem; opacity: 0.85; }
+
+.quickLinks h3 { font-size: 0.9rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px; }
+
+.links { display: flex; flex-direction: column; gap: 10px; }
+.links button {
+  background: var(--surface);
+  color: var(--text);
+  border-radius: var(--radius-sm);
+  padding: 14px 16px;
+  font-size: 0.92rem;
+  font-weight: 500;
+  text-align: left;
+  box-shadow: var(--shadow);
+  transition: background 0.15s;
+}
+.links button:hover { background: #EFF6FF; }

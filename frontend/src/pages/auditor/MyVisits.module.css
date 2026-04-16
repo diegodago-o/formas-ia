@@ -1,0 +1,25 @@
+.loading, .empty {
+  text-align: center;
+  padding: 48px 16px;
+  color: var(--text-muted);
+}
+.empty span { font-size: 3rem; display: block; margin-bottom: 12px; }
+.empty p    { font-size: 1rem; }
+
+.list { display: flex; flex-direction: column; gap: 12px; }
+
+.card {
+  background: var(--surface);
+  border-radius: var(--radius);
+  padding: 16px;
+  box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.top { display: flex; justify-content: space-between; align-items: center; }
+.apt  { font-size: 1.05rem; font-weight: 700; }
+.date { font-size: 0.8rem; color: var(--text-muted); }
+.location { font-size: 0.85rem; color: var(--text-muted); }
+.obs { font-size: 0.83rem; color: var(--warning); background: #FFFBEB; border-radius: 6px; padding: 6px 10px; }

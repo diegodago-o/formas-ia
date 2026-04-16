@@ -1,0 +1,87 @@
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.filters input, .filters select {
+  padding: 9px 12px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 0.88rem;
+  background: var(--surface);
+  outline: none;
+}
+.btnFilter {
+  background: var(--primary);
+  color: #fff;
+  border-radius: var(--radius-sm);
+  padding: 9px 18px;
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+.btnExcel {
+  background: #10B981;
+  color: #fff;
+  border-radius: var(--radius-sm);
+  padding: 9px 18px;
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+
+.count { font-size: 0.85rem; color: var(--text-muted); margin-bottom: 12px; }
+.loading { text-align: center; padding: 40px; color: var(--text-muted); }
+
+.tableWrap { overflow-x: auto; }
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+  background: var(--surface);
+  border-radius: var(--radius);
+  overflow: hidden;
+  box-shadow: var(--shadow);
+}
+.table th {
+  background: var(--primary);
+  color: #fff;
+  padding: 11px 12px;
+  text-align: left;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.table td {
+  padding: 11px 12px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.table tr:last-child td { border-bottom: none; }
+.table tr:hover td { background: #F8FAFC; }
+
+.badge {
+  background: #FEF3C7;
+  color: #92400E;
+  border-radius: 6px;
+  padding: 3px 8px;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+.ok { color: var(--success); font-weight: 700; }
+
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  margin-top: 20px;
+  font-size: 0.88rem;
+}
+.pagination button {
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 8px 16px;
+  color: var(--text);
+  font-size: 0.88rem;
+}
+.pagination button:disabled { opacity: 0.4; cursor: not-allowed; }
