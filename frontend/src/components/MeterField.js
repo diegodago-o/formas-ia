@@ -38,6 +38,11 @@ export default function MeterField({ tipo, data, onChange, onFile, isOnline = tr
     setOcrResult(null);
     setEditando(false);
     setFotoMala(false);
+    // Si tenía "sin acceso" seleccionado, la foto lo cancela
+    setSinAcceso(false);
+    setMotivoAcceso('');
+    onChange('sin_acceso', false);
+    onChange('motivo_sin_acceso', null);
 
     let fileToUpload = file;
     try { fileToUpload = await compressImage(file); } catch { /* usar original */ }
