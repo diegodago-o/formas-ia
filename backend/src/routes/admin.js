@@ -124,7 +124,7 @@ router.get('/alerts', ...isAdmin, ah(async (req, res) => {
      LEFT JOIN torres t ON t.id = v.torre_id
      JOIN usuarios u ON u.id  = v.auditor_id
      WHERE m.requiere_revision = 1
-       AND v.estado NOT IN ('rechazada', 'anulada')
+       AND v.estado NOT IN ('aprobada', 'rechazada', 'anulada')
      ORDER BY v.fecha DESC`
   );
   res.json(rows);
