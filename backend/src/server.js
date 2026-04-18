@@ -18,6 +18,9 @@ const reportRoutes = require('./routes/reports');
 const app = express();
 const PORT = process.env.PORT || 4000;
 
+// Confiar en el proxy de Nginx (necesario para express-rate-limit y X-Forwarded-For)
+app.set('trust proxy', 1);
+
 // Seguridad y utilidades
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
 app.use(compression());
