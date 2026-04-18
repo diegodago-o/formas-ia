@@ -7,6 +7,21 @@
   background: var(--bg);
 }
 
+/* Banner sin conexión */
+.offlineBanner {
+  background: #1F2937;
+  color: #F9FAFB;
+  font-size: 0.82rem;
+  font-weight: 600;
+  text-align: center;
+  padding: 6px 16px;
+  letter-spacing: 0.3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
 .header {
   display: flex;
   align-items: center;

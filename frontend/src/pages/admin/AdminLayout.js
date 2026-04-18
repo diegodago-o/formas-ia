@@ -22,7 +22,7 @@ export default function AdminLayout() {
       {/* Sidebar */}
       <aside className={`${styles.sidebar} ${sideOpen ? styles.open : ''}`}>
         <div className={styles.sideHeader}>
-          <span className={styles.logo}>Formas IA</span>
+          <span className={styles.logo}>LecturIA</span>
           <button className={styles.closeBtn} onClick={() => setSideOpen(false)}>✕</button>
         </div>
         <div className={styles.userInfo}>

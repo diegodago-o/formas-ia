@@ -4,6 +4,7 @@
 
 .list { display: flex; flex-direction: column; gap: 16px; }
 
+/* ── Tarjeta base ─────────────────────────────────────────────── */
 .card {
   background: var(--surface);
   border-radius: var(--radius);
@@ -15,7 +16,14 @@
   border-left: 4px solid var(--warning);
 }
 
-.cardHeader { display: flex; justify-content: space-between; align-items: center; }
+/* Tarjeta "sin detección" tiene borde rojo y fondo levemente rosado */
+.cardSinDeteccion {
+  border-left-color: var(--danger);
+  background: #FFFAFA;
+}
+
+/* ── Cabecera ─────────────────────────────────────────────────── */
+.cardHeader { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 .tipo { font-weight: 700; font-size: 1rem; }
 
 .confianza {
@@ -29,19 +37,118 @@
 .confianza.media { background: #FEF3C7; color: #92400E; }
 .confianza.baja  { background: #FEE2E2; color: #991B1B; }
 
-.info { display: flex; flex-direction: column; gap: 3px; font-size: 0.83rem; color: var(--text-muted); }
-
-.foto {
-  width: 100%;
-  max-height: 220px;
-  object-fit: cover;
-  border-radius: var(--radius-sm);
+.badgeSinDeteccion {
+  font-size: 0.75rem;
+  font-weight: 700;
+  border-radius: 6px;
+  padding: 3px 10px;
+  background: #FEE2E2;
+  color: #991B1B;
 }
 
+/* ── Info ubicación ───────────────────────────────────────────── */
+.info { display: flex; flex-direction: column; gap: 3px; font-size: 0.83rem; color: var(--text-muted); }
+
+/* ── Foto ─────────────────────────────────────────────────────── */
+.foto {
+  width: 100%;
+  max-height: 400px;
+  object-fit: contain;
+  background: #000;
+  border-radius: var(--radius-sm);
+  cursor: zoom-in;
+}
+
+/* ── Caja "sin detección" ─────────────────────────────────────── */
+.sinDeteccionBox {
+  background: #FEF2F2;
+  border: 1px solid #FCA5A5;
+  border-radius: var(--radius-sm);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.sinDeteccionTitle {
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: #991B1B;
+}
+.sinDeteccionNota {
+  font-size: 0.82rem;
+  color: #7F1D1D;
+  font-style: italic;
+  background: rgba(255,255,255,0.6);
+  border-radius: 4px;
+  padding: 6px 8px;
+}
+.sinDeteccionDesc {
+  font-size: 0.82rem;
+  color: #6B7280;
+  line-height: 1.5;
+}
+
+/* ── Lecturas (caso baja confianza) ───────────────────────────── */
 .readings { display: flex; flex-direction: column; gap: 6px; font-size: 0.88rem; }
 .readings code { background: var(--bg); padding: 2px 8px; border-radius: 4px; font-size: 0.95rem; }
-.nota { font-size: 0.8rem; color: var(--warning); background: #FFFBEB; border-radius: 6px; padding: 6px 10px; }
+.nota {
+  font-size: 0.8rem;
+  color: #92400E;
+  background: #FFFBEB;
+  border-radius: 6px;
+  padding: 6px 10px;
+}
+.notaMala { background: #FEF2F2; color: #991B1B; }
 
+/* ── Fila de acciones ─────────────────────────────────────────── */
+.actionRow {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* Botón: revisar lectura (baja confianza) */
+.reviewBtn {
+  background: var(--bg);
+  color: var(--primary);
+  border: 1.5px solid var(--primary);
+  border-radius: var(--radius-sm);
+  padding: 10px 16px;
+  font-weight: 600;
+  font-size: 0.9rem;
+  transition: background 0.15s;
+}
+.reviewBtn:hover { background: #EFF6FF; }
+
+/* Botón: ingresar manual (sin detección) */
+.btnManual {
+  flex: 1;
+  background: var(--bg);
+  color: var(--primary);
+  border: 1.5px solid var(--primary);
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  font-weight: 600;
+  font-size: 0.88rem;
+  transition: background 0.15s;
+}
+.btnManual:hover { background: #EFF6FF; }
+
+/* Botón: rechazar visita (sin detección) */
+.btnRechazar {
+  flex: 1;
+  background: #FEF2F2;
+  color: #991B1B;
+  border: 1.5px solid #FCA5A5;
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  font-weight: 700;
+  font-size: 0.88rem;
+  transition: background 0.15s;
+}
+.btnRechazar:hover { background: #FEE2E2; }
+
+/* ── Formulario lectura manual ────────────────────────────────── */
 .editRow { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .editRow input {
   flex: 1;
@@ -51,6 +158,7 @@
   border-radius: var(--radius-sm);
   font-size: 1rem;
   outline: none;
+  font-family: 'Courier New', monospace;
 }
 .saveBtn {
   background: var(--success);
@@ -60,7 +168,8 @@
   font-weight: 600;
   font-size: 0.9rem;
 }
-.saveBtn:disabled { opacity: 0.5; }
+.saveBtn:disabled { opacity: 0.5; cursor: not-allowed; }
+
 .cancelBtn {
   background: transparent;
   color: var(--text-muted);
@@ -70,15 +179,43 @@
   font-size: 0.9rem;
 }
 
-.reviewBtn {
-  background: var(--bg);
-  color: var(--primary);
-  border: 1.5px solid var(--primary);
+/* ── Formulario rechazo ───────────────────────────────────────── */
+.rejectBox {
+  background: #FEF2F2;
+  border: 1.5px solid #FCA5A5;
+  border-radius: var(--radius-sm);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.rejectTitle {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #991B1B;
+  margin: 0;
+}
+.rejectTextarea {
+  padding: 10px 12px;
+  border: 1.5px solid #FCA5A5;
+  border-radius: var(--radius-sm);
+  font-size: 0.88rem;
+  resize: vertical;
+  outline: none;
+  font-family: inherit;
+  color: var(--text);
+  background: #fff;
+}
+.rejectBtns { display: flex; gap: 8px; flex-wrap: wrap; }
+.rejectConfirmBtn {
+  flex: 1;
+  background: var(--danger);
+  color: #fff;
   border-radius: var(--radius-sm);
   padding: 10px 16px;
-  font-weight: 600;
-  font-size: 0.9rem;
-  align-self: flex-start;
-  transition: background 0.15s;
+  font-weight: 700;
+  font-size: 0.88rem;
+  transition: opacity 0.15s;
 }
-.reviewBtn:hover { background: #EFF6FF; }
+.rejectConfirmBtn:hover:not(:disabled) { opacity: 0.88; }
+.rejectConfirmBtn:disabled { opacity: 0.5; cursor: not-allowed; }

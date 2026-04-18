@@ -1,6 +1,16 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../../services/api';
+
+async function downloadExcel() {
+  const resp = await api.get('/reports/excel', { responseType: 'blob' });
+  const url  = URL.createObjectURL(resp.data);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = `lectura-ia-${Date.now()}.xlsx`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
 import styles from './AdminDashboard.module.css';
 
 export default function AdminDashboard() {
@@ -39,11 +49,7 @@ export default function AdminDashboard() {
         <div className={styles.links}>
           <button onClick={() => navigate('/admin/catalogos')}>🏢 Gestionar conjuntos</button>
           <button onClick={() => navigate('/admin/usuarios')}>👥 Gestionar usuarios</button>
-          <button onClick={() => {
-            const url = `${process.env.REACT_APP_API_URL || 'http://localhost:4000/api'}/reports/excel`;
-            const token = localStorage.getItem('token');
-            window.open(`${url}?token=${token}`);
-          }}>📥 Descargar reporte Excel</button>
+          <button onClick={downloadExcel}>📥 Descargar reporte Excel</button>
         </div>
       </div>
     </div>

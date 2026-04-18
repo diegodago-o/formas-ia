@@ -1,0 +1,184 @@
+.overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.55);
+  z-index: 500;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 0;
+}
+
+.modal {
+  background: var(--surface);
+  border-radius: var(--radius) var(--radius) 0 0;
+  width: 100%;
+  max-width: 480px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 -8px 40px rgba(0,0,0,0.25);
+  overflow: hidden;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.header h2 { font-size: 1rem; font-weight: 700; }
+
+.closeBtn {
+  background: var(--bg);
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 1rem;
+  color: var(--text-muted);
+}
+
+.loading { padding: 40px; text-align: center; color: var(--text-muted); }
+
+.body {
+  overflow-y: auto;
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding-bottom: 32px;
+}
+
+.estadoRow { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.estadoBadge {
+  font-size: 0.8rem;
+  font-weight: 700;
+  border-radius: 20px;
+  padding: 5px 14px;
+}
+.motivoRechazo { font-size: 0.82rem; color: var(--danger); }
+
+.section { display: flex; flex-direction: column; gap: 10px; }
+.section h3 { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); font-weight: 700; }
+
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.field { display: flex; flex-direction: column; gap: 2px; }
+.field label { font-size: 0.72rem; color: var(--text-muted); font-weight: 600; text-transform: uppercase; }
+.field span  { font-size: 0.9rem; }
+
+.obs {
+  background: #FFFBEB;
+  border-left: 3px solid var(--warning);
+  padding: 10px 12px;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  font-size: 0.88rem;
+}
+
+.medCard {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+.medHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  background: var(--bg);
+  border-bottom: 2px solid;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+.lectura { font-family: 'Courier New', monospace; font-size: 1.1rem; color: var(--primary); }
+.foto {
+  width: 100%;
+  max-height: 200px;
+  object-fit: contain;
+  background: #000;
+  display: block;
+}
+
+/* Sin evidencia */
+.sinAccesoBox {
+  background: #FEF2F2;
+  color: #991B1B;
+  padding: 12px 14px;
+  font-size: 0.88rem;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  border-top: 1px solid #FCA5A5;
+}
+.sinAccesoBox div { display: flex; flex-direction: column; gap: 2px; }
+.sinAccesoBox strong { font-weight: 700; }
+.sinAccesoMotivo { font-weight: 400; font-style: italic; font-size: 0.82rem; }
+
+/* Sin foto */
+.noFotoBox {
+  background: var(--bg);
+  color: var(--text-muted);
+  padding: 16px 14px;
+  font-size: 0.85rem;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  border-top: 1px dashed var(--border);
+}
+.noFotoIcon { font-size: 1.5rem; opacity: 0.5; }
+.lecturaInline {
+  font-family: 'Courier New', monospace;
+  font-size: 1rem;
+  color: var(--primary);
+  margin-left: 4px;
+}
+
+/* Anular */
+.btnAnular {
+  width: 100%;
+  background: transparent;
+  color: var(--danger);
+  border: 1.5px solid var(--danger);
+  border-radius: var(--radius-sm);
+  padding: 13px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  transition: background 0.15s;
+}
+.btnAnular:hover { background: #FEE2E2; }
+
+.confirmBox {
+  background: #FEF2F2;
+  border-radius: var(--radius-sm);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border: 1.5px solid #FCA5A5;
+}
+.confirmBox p { font-size: 0.9rem; color: var(--text); }
+.error { font-size: 0.82rem; color: var(--danger); }
+
+.confirmBtns { display: flex; gap: 10px; }
+
+.btnAnularConfirm {
+  flex: 1;
+  background: var(--danger);
+  color: #fff;
+  border-radius: var(--radius-sm);
+  padding: 11px;
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+.btnAnularConfirm:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.btnCancelar {
+  flex: 1;
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 11px;
+  font-size: 0.9rem;
+  color: var(--text-muted);
+}

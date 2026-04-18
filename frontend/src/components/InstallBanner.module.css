@@ -1,0 +1,128 @@
+/* ── Chip discreto ─────────────────────────────────────────────── */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  border-radius: 50%;
+  width: 32px;
+  height: 32px;
+  font-size: 1.2rem;
+  cursor: pointer;
+  opacity: 0.5;
+  transition: opacity 0.15s;
+  margin-top: 8px;
+  padding: 0;
+}
+.chip:hover { opacity: 1; }
+
+/* ── Overlay ───────────────────────────────────────────────────── */
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.45);
+  z-index: 900;
+  display: flex;
+  align-items: flex-end;
+}
+
+/* ── Bottom-sheet ──────────────────────────────────────────────── */
+.sheet {
+  background: var(--surface);
+  border-radius: 20px 20px 0 0;
+  width: 100%;
+  padding: 12px 20px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  box-shadow: 0 -8px 30px rgba(0,0,0,0.15);
+}
+
+.sheetHandle {
+  width: 36px;
+  height: 4px;
+  background: var(--border);
+  border-radius: 2px;
+  margin: 0 auto 4px;
+}
+
+.sheetTitle {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text);
+  margin: 0;
+}
+
+.sheetDesc {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+  margin: 0;
+}
+
+/* ── Pasos ─────────────────────────────────────────────────────── */
+.steps { display: flex; flex-direction: column; gap: 10px; }
+.step {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 0.88rem;
+  color: var(--text);
+  line-height: 1.4;
+}
+.num {
+  background: var(--primary);
+  color: #fff;
+  border-radius: 50%;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+.shareIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--primary);
+  color: #fff;
+  border-radius: 5px;
+  padding: 1px 5px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  margin: 0 2px;
+  vertical-align: middle;
+}
+
+/* ── Botón instalar Android ────────────────────────────────────── */
+.btnInstall {
+  background: var(--primary);
+  color: #fff;
+  border-radius: var(--radius-sm);
+  padding: 14px;
+  font-size: 0.95rem;
+  font-weight: 700;
+  width: 100%;
+  transition: opacity 0.15s;
+}
+.btnInstall:disabled { opacity: 0.6; cursor: not-allowed; }
+.btnInstall:hover:not(:disabled) { opacity: 0.88; }
+
+/* ── Acciones del sheet ────────────────────────────────────────── */
+.sheetActions {
+  padding-top: 4px;
+  border-top: 1px solid var(--border);
+}
+.btnClose {
+  width: 100%;
+  background: var(--bg);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px;
+  font-size: 0.88rem;
+  color: var(--text);
+}

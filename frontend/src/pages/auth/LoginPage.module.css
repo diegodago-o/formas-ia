@@ -1,9 +1,16 @@
 .page {
   min-height: 100vh;
   display: flex;
+  flex-direction: column;
+  background: linear-gradient(135deg, #1E3A5F 0%, #2E5490 100%);
+}
+
+/* Área central que centra la tarjeta */
+.center {
+  flex: 1;
+  display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #1E3A5F 0%, #2E5490 100%);
   padding: 24px;
 }
 

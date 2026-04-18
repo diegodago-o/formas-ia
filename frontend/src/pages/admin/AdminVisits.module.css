@@ -58,6 +58,27 @@
 .table tr:last-child td { border-bottom: none; }
 .table tr:hover td { background: #F8FAFC; }
 
+.estadoBadge {
+  font-size: 0.75rem;
+  font-weight: 700;
+  border-radius: 20px;
+  padding: 3px 10px;
+  text-transform: capitalize;
+  white-space: nowrap;
+}
+
+.btnVer {
+  background: var(--primary);
+  color: #fff;
+  border-radius: var(--radius-sm);
+  padding: 5px 12px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  white-space: nowrap;
+  transition: opacity 0.15s;
+}
+.btnVer:hover { opacity: 0.85; }
+
 .badge {
   background: #FEF3C7;
   color: #92400E;

@@ -1,3 +1,31 @@
+/* Barra de estado caché offline */
+.cacheBar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 8px 16px;
+  margin-bottom: 12px;
+  border-radius: var(--radius-sm);
+  background: #EFF6FF;
+  color: var(--accent);
+}
+.cacheSpinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid #BFDBFE;
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.cacheOk      { background: #D1FAE5; color: #065F46; }
+.cacheOffline { background: #F3F4F6; color: #6B7280; }
+.cacheError   { background: #FEF3C7; color: #92400E; }
+
 .welcome {
   background: var(--primary);
   color: #fff;
@@ -29,5 +57,20 @@
 .card.primary .cardDesc { color: rgba(255,255,255,0.8); }
 
 .icon { font-size: 2rem; flex-shrink: 0; }
-.cardTitle { font-size: 1rem; font-weight: 700; margin-bottom: 3px; }
+.cardTitle {
+  font-size: 1rem;
+  font-weight: 700;
+  margin-bottom: 3px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.draftBadge {
+  background: #FCD34D;
+  color: #78350F;
+  font-size: 0.7rem;
+  font-weight: 700;
+  border-radius: 20px;
+  padding: 2px 8px;
+}
 .cardDesc { font-size: 0.82rem; color: var(--text-muted); }

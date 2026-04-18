@@ -1,18 +1,21 @@
 import React, { useEffect, useState } from 'react';
 import api from '../../services/api';
+import VisitModal from './VisitModal';
 import styles from './AdminVisits.module.css';
 
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:4000/api';
-
 export default function AdminVisits() {
-  const [data, setData]     = useState({ data: [], total: 0 });
-  const [page, setPage]     = useState(1);
+  const [data, setData]       = useState({ data: [], total: 0 });
+  const [page, setPage]       = useState(1);
   const [filters, setFilters] = useState({ desde: '', hasta: '', requiere_revision: '' });
   const [loading, setLoading] = useState(true);
+  const [selectedId, setSelectedId] = useState(null);
 
   const load = (p = page, f = filters) => {
     setLoading(true);
-    const params = new URLSearchParams({ page: p, limit: 20, ...Object.fromEntries(Object.entries(f).filter(([,v]) => v)) });
+    const params = new URLSearchParams({
+      page: p, limit: 20,
+      ...Object.fromEntries(Object.entries(f).filter(([, v]) => v)),
+    });
     api.get(`/admin/visits?${params}`).then(r => setData(r.data)).finally(() => setLoading(false));
   };
 
@@ -20,19 +23,31 @@ export default function AdminVisits() {
 
   const applyFilters = () => { setPage(1); load(1, filters); };
 
-  const downloadExcel = () => {
-    const token = localStorage.getItem('token');
-    const params = new URLSearchParams(Object.fromEntries(Object.entries(filters).filter(([,v]) => v)));
-    window.open(`${API_URL}/reports/excel?${params}&auth=${token}`);
+  const downloadExcel = async () => {
+    const params = new URLSearchParams(Object.fromEntries(Object.entries(filters).filter(([, v]) => v)));
+    const resp = await api.get(`/reports/excel?${params}`, { responseType: 'blob' });
+    const url  = URL.createObjectURL(resp.data);
+    const a    = document.createElement('a');
+    a.href     = url;
+    a.download = `lectura-ia-${Date.now()}.xlsx`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const ESTADO_STYLE = {
+    pendiente: { bg: '#FEF3C7', color: '#92400E' },
+    aprobada:  { bg: '#D1FAE5', color: '#065F46' },
+    rechazada: { bg: '#FEE2E2', color: '#991B1B' },
+    anulada:   { bg: '#F3F4F6', color: '#6B7280' },
   };
 
   return (
     <div>
       {/* Filtros */}
       <div className={styles.filters}>
-        <input type="date" value={filters.desde} onChange={e => setFilters(f => ({...f, desde: e.target.value}))} />
-        <input type="date" value={filters.hasta} onChange={e => setFilters(f => ({...f, hasta: e.target.value}))} />
-        <select value={filters.requiere_revision} onChange={e => setFilters(f => ({...f, requiere_revision: e.target.value}))}>
+        <input type="date" value={filters.desde} onChange={e => setFilters(f => ({ ...f, desde: e.target.value }))} />
+        <input type="date" value={filters.hasta} onChange={e => setFilters(f => ({ ...f, hasta: e.target.value }))} />
+        <select value={filters.requiere_revision} onChange={e => setFilters(f => ({ ...f, requiere_revision: e.target.value }))}>
           <option value="">Todas</option>
           <option value="1">Con alertas OCR</option>
         </select>
@@ -49,35 +64,57 @@ export default function AdminVisits() {
               <thead>
                 <tr>
                   <th>Fecha</th><th>Ciudad</th><th>Conjunto</th><th>Torre</th>
-                  <th>Apto</th><th>Auditor</th><th>Alertas</th>
+                  <th>Apto</th><th>Auditor</th><th>Estado</th><th>Alertas</th><th></th>
                 </tr>
               </thead>
               <tbody>
-                {data.data.map(v => (
-                  <tr key={v.id}>
-                    <td>{new Date(v.fecha).toLocaleDateString('es-CO')}</td>
-                    <td>{v.ciudad}</td>
-                    <td>{v.conjunto}</td>
-                    <td>{v.torre || '–'}</td>
-                    <td><strong>{v.apartamento}</strong></td>
-                    <td>{v.auditor}</td>
-                    <td>{v.alertas_ocr > 0
-                      ? <span className={styles.badge}>{v.alertas_ocr} ⚠️</span>
-                      : <span className={styles.ok}>✓</span>}
-                    </td>
-                  </tr>
-                ))}
+                {data.data.map(v => {
+                  const est = ESTADO_STYLE[v.estado || 'pendiente'];
+                  return (
+                    <tr key={v.id}>
+                      <td>{new Date(v.fecha).toLocaleDateString('es-CO')}</td>
+                      <td>{v.ciudad}</td>
+                      <td>{v.conjunto}</td>
+                      <td>{v.torre || '–'}</td>
+                      <td><strong>{v.apartamento}</strong></td>
+                      <td>{v.auditor}</td>
+                      <td>
+                        <span className={styles.estadoBadge} style={{ background: est.bg, color: est.color }}>
+                          {v.estado || 'pendiente'}
+                        </span>
+                      </td>
+                      <td>
+                        {v.alertas_ocr > 0
+                          ? <span className={styles.badge}>{v.alertas_ocr} ⚠️</span>
+                          : <span className={styles.ok}>✓</span>}
+                      </td>
+                      <td>
+                        <button className={styles.btnVer} onClick={() => setSelectedId(v.id)}>
+                          👁 Ver
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
       }
 
-      {/* Paginación */}
       <div className={styles.pagination}>
-        <button disabled={page === 1} onClick={() => { setPage(p => p - 1); load(page - 1); }}>← Anterior</button>
+        <button disabled={page === 1} onClick={() => { const p = page - 1; setPage(p); load(p); }}>← Anterior</button>
         <span>Página {page} de {Math.ceil(data.total / 20) || 1}</span>
-        <button disabled={page * 20 >= data.total} onClick={() => { setPage(p => p + 1); load(page + 1); }}>Siguiente →</button>
+        <button disabled={page * 20 >= data.total} onClick={() => { const p = page + 1; setPage(p); load(p); }}>Siguiente →</button>
       </div>
+
+      {/* Modal detalle */}
+      {selectedId && (
+        <VisitModal
+          visitId={selectedId}
+          onClose={() => setSelectedId(null)}
+          onUpdated={() => { setSelectedId(null); load(); }}
+        />
+      )}
     </div>
   );
 }

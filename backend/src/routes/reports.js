@@ -2,82 +2,182 @@ const router = require('express').Router();
 const ExcelJS = require('exceljs');
 const { pool } = require('../models/db');
 const { authMiddleware, requireRole } = require('../middleware/auth');
+const ah = require('../middleware/asyncHandler');
 
-// GET /api/reports/excel?desde=&hasta=&ciudad_id=&conjunto_id=
-router.get('/excel', authMiddleware, requireRole('admin'), async (req, res) => {
+const BASE_URL = process.env.BASE_URL || 'http://localhost:4005';
+
+function calcDuracion(inicio, fin) {
+  if (!inicio || !fin) return '';
+  const ms = new Date(fin) - new Date(inicio);
+  if (ms <= 0) return '';
+  const min = Math.round(ms / 60000);
+  if (min < 60) return `${min} min`;
+  const h = Math.floor(min / 60);
+  const m = min % 60;
+  return m > 0 ? `${h}h ${m}min` : `${h}h`;
+}
+
+// GET /api/reports/excel
+router.get('/excel', authMiddleware, requireRole('admin'), ah(async (req, res) => {
   const { desde, hasta, ciudad_id, conjunto_id } = req.query;
   const conditions = [];
   const params = [];
 
-  if (desde)      { conditions.push('DATE(v.fecha) >= ?'); params.push(desde); }
-  if (hasta)      { conditions.push('DATE(v.fecha) <= ?'); params.push(hasta); }
-  if (ciudad_id)  { conditions.push('v.ciudad_id = ?');   params.push(ciudad_id); }
-  if (conjunto_id){ conditions.push('v.conjunto_id = ?'); params.push(conjunto_id); }
+  if (desde)       { conditions.push('DATE(v.fecha) >= ?'); params.push(desde); }
+  if (hasta)       { conditions.push('DATE(v.fecha) <= ?'); params.push(hasta); }
+  if (ciudad_id)   { conditions.push('v.ciudad_id = ?');   params.push(ciudad_id); }
+  if (conjunto_id) { conditions.push('v.conjunto_id = ?'); params.push(conjunto_id); }
 
   const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
 
-  const [rows] = await pool.query(
-    `SELECT v.id, v.fecha, v.apartamento, v.observaciones,
-            v.latitud, v.longitud,
+  const [visitas] = await pool.query(
+    `SELECT v.id, v.fecha, v.hora_inicio, v.hora_fin, v.apartamento, v.observaciones,
+            v.latitud, v.longitud, v.estado, v.motivo_rechazo,
             ci.nombre AS ciudad, c.nombre AS conjunto, t.nombre AS torre,
-            u.nombre AS auditor,
-            MAX(CASE WHEN m.tipo='luz'  THEN m.lectura_confirmada END) AS lectura_luz,
-            MAX(CASE WHEN m.tipo='agua' THEN m.lectura_confirmada END) AS lectura_agua,
-            MAX(CASE WHEN m.tipo='gas'  THEN m.lectura_confirmada END) AS lectura_gas,
-            SUM(m.requiere_revision) AS alertas_pendientes
+            u.nombre AS auditor
      FROM visitas v
      JOIN ciudades ci ON ci.id = v.ciudad_id
      JOIN conjuntos c ON c.id = v.conjunto_id
      LEFT JOIN torres t ON t.id = v.torre_id
      JOIN usuarios u ON u.id = v.auditor_id
-     LEFT JOIN medidores m ON m.visita_id = v.id
      ${where}
-     GROUP BY v.id
      ORDER BY v.fecha DESC`,
     params
   );
 
+  // Cargar medidores de todas las visitas en una sola query
+  const visitaIds = visitas.map(v => v.id);
+  let medidoresMap = {};
+  if (visitaIds.length) {
+    const [medidores] = await pool.query(
+      `SELECT visita_id, tipo, foto_path, lectura_confirmada, confianza_ocr, requiere_revision
+       FROM medidores WHERE visita_id IN (?)`,
+      [visitaIds]
+    );
+    medidores.forEach(m => {
+      if (!medidoresMap[m.visita_id]) medidoresMap[m.visita_id] = {};
+      medidoresMap[m.visita_id][m.tipo] = m;
+    });
+  }
+
   const workbook = new ExcelJS.Workbook();
+  workbook.creator = 'LecturIA';
   const sheet = workbook.addWorksheet('Visitas');
 
   sheet.columns = [
-    { header: 'ID',             key: 'id',                  width: 8  },
-    { header: 'Fecha',          key: 'fecha',               width: 20 },
-    { header: 'Ciudad',         key: 'ciudad',              width: 18 },
-    { header: 'Conjunto',       key: 'conjunto',            width: 22 },
-    { header: 'Torre',          key: 'torre',               width: 12 },
-    { header: 'Apartamento',    key: 'apartamento',         width: 14 },
-    { header: 'Auditor',        key: 'auditor',             width: 20 },
-    { header: 'Lect. Luz',      key: 'lectura_luz',         width: 14 },
-    { header: 'Lect. Agua',     key: 'lectura_agua',        width: 14 },
-    { header: 'Lect. Gas',      key: 'lectura_gas',         width: 14 },
-    { header: 'Observaciones',  key: 'observaciones',       width: 30 },
-    { header: 'Alertas OCR',    key: 'alertas_pendientes',  width: 14 },
-    { header: 'Latitud',        key: 'latitud',             width: 14 },
-    { header: 'Longitud',       key: 'longitud',            width: 14 },
+    { header: 'ID',               key: 'id',                width: 6  },
+    { header: 'Fecha',            key: 'fecha',             width: 20 },
+    { header: 'Hora Inicio',      key: 'hora_inicio',       width: 11 },
+    { header: 'Hora Fin',         key: 'hora_fin',          width: 11 },
+    { header: 'Duración',         key: 'duracion',          width: 10 },
+    { header: 'Ciudad',           key: 'ciudad',            width: 16 },
+    { header: 'Conjunto',         key: 'conjunto',          width: 20 },
+    { header: 'Torre',            key: 'torre',             width: 10 },
+    { header: 'Apartamento',      key: 'apartamento',       width: 12 },
+    { header: 'Auditor',          key: 'auditor',           width: 18 },
+    { header: 'Latitud',          key: 'latitud',           width: 13 },
+    { header: 'Longitud',         key: 'longitud',          width: 13 },
+    { header: 'Lect. Luz',        key: 'lectura_luz',       width: 13 },
+    { header: 'Foto Luz',         key: 'foto_luz_nombre',   width: 34 },
+    { header: 'Link Foto Luz',    key: 'foto_luz_link',     width: 50 },
+    { header: 'Confianza Luz',    key: 'conf_luz',          width: 13 },
+    { header: 'Lect. Agua',       key: 'lectura_agua',      width: 13 },
+    { header: 'Foto Agua',        key: 'foto_agua_nombre',  width: 34 },
+    { header: 'Link Foto Agua',   key: 'foto_agua_link',    width: 50 },
+    { header: 'Confianza Agua',   key: 'conf_agua',         width: 13 },
+    { header: 'Lect. Gas',        key: 'lectura_gas',       width: 13 },
+    { header: 'Foto Gas',         key: 'foto_gas_nombre',   width: 34 },
+    { header: 'Link Foto Gas',    key: 'foto_gas_link',     width: 50 },
+    { header: 'Confianza Gas',    key: 'conf_gas',          width: 13 },
+    { header: 'Observaciones',    key: 'observaciones',     width: 35 },
+    { header: 'Estado',           key: 'estado',            width: 12 },
+    { header: 'Motivo Rechazo',   key: 'motivo_rechazo',    width: 30 },
   ];
 
-  // Estilo de encabezado
-  sheet.getRow(1).eachCell(cell => {
+  // Estilo encabezado
+  const headerRow = sheet.getRow(1);
+  headerRow.height = 24;
+  headerRow.eachCell(cell => {
     cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E3A5F' } };
-    cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-    cell.alignment = { vertical: 'middle', horizontal: 'center' };
+    cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
+    cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+    cell.border = { bottom: { style: 'thin', color: { argb: 'FF3B82F6' } } };
   });
-  sheet.getRow(1).height = 22;
 
-  rows.forEach(row => {
-    const r = sheet.addRow(row);
-    if (row.alertas_pendientes > 0) {
-      r.getCell('alertas_pendientes').fill = {
-        type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFC107' },
-      };
+  const ESTADO_COLOR = { aprobada: 'FFD1FAE5', rechazada: 'FFFEE2E2', pendiente: 'FFFEF3C7' };
+  const CONF_COLOR   = { alta: 'FFD1FAE5', media: 'FFFEF3C7', baja: 'FFFEE2E2' };
+
+  visitas.forEach((v, i) => {
+    const med = medidoresMap[v.id] || {};
+    const fotoLink = (tipo) => med[tipo]?.foto_path
+      ? `${BASE_URL}/uploads/${med[tipo].foto_path}` : '';
+
+    const rowData = {
+      id:              v.id,
+      fecha:           new Date(v.fecha).toLocaleString('es-CO'),
+      hora_inicio:     v.hora_inicio ? new Date(v.hora_inicio).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' }) : '',
+      hora_fin:        v.hora_fin    ? new Date(v.hora_fin).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' }) : '',
+      duracion:        calcDuracion(v.hora_inicio, v.hora_fin),
+      ciudad:          v.ciudad,
+      conjunto:        v.conjunto,
+      torre:           v.torre || '–',
+      apartamento:     v.apartamento,
+      auditor:         v.auditor,
+      latitud:         v.latitud  ?? '',
+      longitud:        v.longitud ?? '',
+      lectura_luz:     med.luz?.lectura_confirmada  ?? '',
+      foto_luz_nombre: med.luz?.foto_path           ?? '',
+      foto_luz_link:   fotoLink('luz'),
+      conf_luz:        med.luz?.confianza_ocr        ?? '',
+      lectura_agua:    med.agua?.lectura_confirmada ?? '',
+      foto_agua_nombre:med.agua?.foto_path          ?? '',
+      foto_agua_link:  fotoLink('agua'),
+      conf_agua:       med.agua?.confianza_ocr       ?? '',
+      lectura_gas:     med.gas?.lectura_confirmada  ?? '',
+      foto_gas_nombre: med.gas?.foto_path           ?? '',
+      foto_gas_link:   fotoLink('gas'),
+      conf_gas:        med.gas?.confianza_ocr        ?? '',
+      observaciones:   v.observaciones ?? '',
+      estado:          v.estado ?? 'pendiente',
+      motivo_rechazo:  v.motivo_rechazo ?? '',
+    };
+
+    const r = sheet.addRow(rowData);
+    r.height = 18;
+
+    // Zebra
+    if (i % 2 === 1) {
+      r.eachCell(cell => {
+        if (!cell.fill?.fgColor) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF8FAFC' } };
+      });
     }
+
+    // Color estado
+    const estadoColor = ESTADO_COLOR[rowData.estado];
+    if (estadoColor) r.getCell('estado').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: estadoColor } };
+
+    // Color confianza
+    ['luz','agua','gas'].forEach(t => {
+      const conf = med[t]?.confianza_ocr;
+      if (conf && CONF_COLOR[conf]) {
+        r.getCell(`conf_${t}`).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: CONF_COLOR[conf] } };
+      }
+      // Hacer link clickeable
+      const linkCell = r.getCell(`foto_${t}_link`);
+      if (linkCell.value) {
+        linkCell.value = { text: 'Ver foto', hyperlink: linkCell.value };
+        linkCell.font  = { color: { argb: 'FF3B82F6' }, underline: true };
+      }
+    });
   });
+
+  // Freeze header
+  sheet.views = [{ state: 'frozen', ySplit: 1 }];
 
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-  res.setHeader('Content-Disposition', `attachment; filename="formas-ia-reporte-${Date.now()}.xlsx"`);
+  res.setHeader('Content-Disposition', `attachment; filename="lectura-ia-${Date.now()}.xlsx"`);
   await workbook.xlsx.write(res);
   res.end();
-});
+}));
 
 module.exports = router;

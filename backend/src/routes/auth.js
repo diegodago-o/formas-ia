@@ -3,9 +3,10 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { pool } = require('../models/db');
 const { authMiddleware } = require('../middleware/auth');
+const ah = require('../middleware/asyncHandler');
 
 // POST /api/auth/login
-router.post('/login', async (req, res) => {
+router.post('/login', ah(async (req, res) => {
   const { email, password } = req.body;
   if (!email || !password) return res.status(400).json({ error: 'Email y contraseña requeridos' });
 
@@ -26,16 +27,16 @@ router.post('/login', async (req, res) => {
     token,
     user: { id: user.id, nombre: user.nombre, email: user.email, rol: user.rol },
   });
-});
+}));
 
 // GET /api/auth/me
-router.get('/me', authMiddleware, async (req, res) => {
+router.get('/me', authMiddleware, ah(async (req, res) => {
   const [rows] = await pool.query(
     'SELECT id, nombre, email, rol FROM usuarios WHERE id = ?',
     [req.user.id]
   );
   if (!rows.length) return res.status(404).json({ error: 'Usuario no encontrado' });
   res.json(rows[0]);
-});
+}));
 
 module.exports = router;
