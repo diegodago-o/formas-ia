@@ -6,7 +6,7 @@ import styles from './AdminVisits.module.css';
 export default function AdminVisits() {
   const [data, setData]       = useState({ data: [], total: 0 });
   const [page, setPage]       = useState(1);
-  const [filters, setFilters] = useState({ desde: '', hasta: '', requiere_revision: '' });
+  const [filters, setFilters] = useState({ desde: '', hasta: '', estado: '', requiere_revision: '' });
   const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState(null);
 
@@ -47,6 +47,13 @@ export default function AdminVisits() {
       <div className={styles.filters}>
         <input type="date" value={filters.desde} onChange={e => setFilters(f => ({ ...f, desde: e.target.value }))} />
         <input type="date" value={filters.hasta} onChange={e => setFilters(f => ({ ...f, hasta: e.target.value }))} />
+        <select value={filters.estado} onChange={e => setFilters(f => ({ ...f, estado: e.target.value }))}>
+          <option value="">Todos los estados</option>
+          <option value="pendiente">Pendiente</option>
+          <option value="aprobada">Aprobada</option>
+          <option value="rechazada">Rechazada</option>
+          <option value="anulada">Anulada</option>
+        </select>
         <select value={filters.requiere_revision} onChange={e => setFilters(f => ({ ...f, requiere_revision: e.target.value }))}>
           <option value="">Todas</option>
           <option value="1">Con alertas OCR</option>
@@ -63,7 +70,8 @@ export default function AdminVisits() {
             <table className={styles.table}>
               <thead>
                 <tr>
-                  <th>Fecha</th><th>Ciudad</th><th>Conjunto</th><th>Torre</th>
+                  <th>#</th><th>Fecha</th><th>H. Inicio</th><th>H. Fin</th>
+                  <th>Ciudad</th><th>Conjunto</th><th>Torre</th>
                   <th>Apto</th><th>Auditor</th><th>Estado</th><th>Alertas</th><th></th>
                 </tr>
               </thead>
@@ -72,7 +80,10 @@ export default function AdminVisits() {
                   const est = ESTADO_STYLE[v.estado || 'pendiente'];
                   return (
                     <tr key={v.id}>
+                      <td><span className={styles.visitId}>#{v.id}</span></td>
                       <td>{new Date(v.fecha).toLocaleDateString('es-CO')}</td>
+                      <td>{v.hora_inicio ? new Date(v.hora_inicio).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' }) : '–'}</td>
+                      <td>{v.hora_fin   ? new Date(v.hora_fin  ).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' }) : '–'}</td>
                       <td>{v.ciudad}</td>
                       <td>{v.conjunto}</td>
                       <td>{v.torre || '–'}</td>

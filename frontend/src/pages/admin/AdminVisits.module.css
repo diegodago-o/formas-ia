@@ -106,3 +106,5 @@
   font-size: 0.88rem;
 }
 .pagination button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.visitId { font-size: 0.8rem; color: var(--text-muted); font-weight: 600; }

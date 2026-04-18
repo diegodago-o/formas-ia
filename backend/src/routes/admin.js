@@ -8,7 +8,7 @@ const isAdmin = [authMiddleware, requireRole('admin')];
 
 // GET /api/admin/visits  — todas las visitas con filtros
 router.get('/visits', ...isAdmin, ah(async (req, res) => {
-  const { ciudad_id, conjunto_id, auditor_id, desde, hasta, requiere_revision, page = 1, limit = 20 } = req.query;
+  const { ciudad_id, conjunto_id, auditor_id, desde, hasta, requiere_revision, estado, page = 1, limit = 20 } = req.query;
   const offset = (page - 1) * limit;
   const conditions = [];
   const params = [];
@@ -18,6 +18,7 @@ router.get('/visits', ...isAdmin, ah(async (req, res) => {
   if (auditor_id)       { conditions.push('v.auditor_id = ?');   params.push(auditor_id); }
   if (desde)            { conditions.push('DATE(v.fecha) >= ?'); params.push(desde); }
   if (hasta)            { conditions.push('DATE(v.fecha) <= ?'); params.push(hasta); }
+  if (estado)           { conditions.push('v.estado = ?');       params.push(estado); }
   if (requiere_revision === '1') {
     conditions.push('EXISTS (SELECT 1 FROM medidores m WHERE m.visita_id = v.id AND m.requiere_revision = 1)');
   }
@@ -27,7 +28,7 @@ router.get('/visits', ...isAdmin, ah(async (req, res) => {
     `SELECT COUNT(*) AS total FROM visitas v ${where}`, params
   );
   const [rows] = await pool.query(
-    `SELECT v.id, v.fecha, v.apartamento, v.estado,
+    `SELECT v.id, v.fecha, v.hora_inicio, v.hora_fin, v.apartamento, v.estado,
             ci.nombre AS ciudad, c.nombre AS conjunto, t.nombre AS torre,
             u.nombre AS auditor,
             (SELECT COUNT(*) FROM medidores m WHERE m.visita_id = v.id AND m.requiere_revision = 1) AS alertas_ocr
