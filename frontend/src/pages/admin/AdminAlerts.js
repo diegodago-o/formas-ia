@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import api from '../../services/api';
+import VisitModal from './VisitModal';
 import styles from './AdminAlerts.module.css';
 
 const TIPO_META = {
@@ -10,13 +11,15 @@ const TIPO_META = {
 
 // Determina el tipo de alerta para bifurcar el flujo
 function tipoAlerta(a) {
-  if (!a.lectura_ocr) return 'sin_deteccion';   // OCR no encontró ningún número
+  if (a.sin_acceso) return 'sin_acceso';         // Auditor no pudo acceder al medidor
+  if (!a.lectura_ocr) return 'sin_deteccion';    // OCR no encontró ningún número
   return 'baja_confianza';                        // OCR lo leyó pero con baja confianza / diferencia
 }
 
 export default function AdminAlerts() {
-  const [alerts, setAlerts]     = useState([]);
-  const [loading, setLoading]   = useState(true);
+  const [alerts, setAlerts]       = useState([]);
+  const [loading, setLoading]     = useState(true);
+  const [viewVisitId, setViewVisitId] = useState(null);
 
   // Estado para "ingresar lectura manual"
   const [editing, setEditing]   = useState(null); // medidor_id
@@ -86,34 +89,41 @@ export default function AdminAlerts() {
 
       <div className={styles.list}>
         {alerts.map(a => {
-          const meta      = TIPO_META[a.tipo];
-          const tipo      = tipoAlerta(a);
-          const sinDet    = tipo === 'sin_deteccion';
+          const meta        = TIPO_META[a.tipo];
+          const tipo        = tipoAlerta(a);
+          const sinDet      = tipo === 'sin_deteccion';
+          const sinAcceso   = tipo === 'sin_acceso';
           const isEditing   = editing === a.medidor_id;
           const isRejecting = rejecting?.medidor_id === a.medidor_id;
 
           return (
             <div
               key={a.medidor_id}
-              className={`${styles.card} ${sinDet ? styles.cardSinDeteccion : ''}`}
+              className={`${styles.card} ${sinDet ? styles.cardSinDeteccion : ''} ${sinAcceso ? styles.cardSinAcceso : ''}`}
             >
               {/* Cabecera */}
               <div className={styles.cardHeader}>
                 <span className={styles.tipo}>{meta.emoji} Medidor de {meta.label}</span>
-                {sinDet
-                  ? <span className={styles.badgeSinDeteccion}>📸 Sin detección</span>
-                  : <span className={`${styles.confianza} ${styles[a.confianza_ocr]}`}>
-                      {a.confianza_ocr?.toUpperCase()}
-                    </span>
+                {sinAcceso
+                  ? <span className={styles.badgeSinAcceso}>🚫 Sin acceso</span>
+                  : sinDet
+                    ? <span className={styles.badgeSinDeteccion}>📸 Sin detección</span>
+                    : <span className={`${styles.confianza} ${styles[a.confianza_ocr]}`}>
+                        {a.confianza_ocr?.toUpperCase()}
+                      </span>
                 }
               </div>
 
-              {/* Info ubicación */}
+              {/* Info ubicación + visita */}
               <div className={styles.info}>
+                <span>🆔 Visita #{a.visita_id}</span>
                 <span>📍 {a.ciudad} · {a.conjunto}{a.torre ? ` · Torre ${a.torre}` : ''} · Apto {a.apartamento}</span>
                 <span>👤 {a.auditor}</span>
                 <span>📅 {new Date(a.fecha).toLocaleDateString('es-CO')}</span>
               </div>
+              <button className={styles.btnVerVisita} onClick={() => setViewVisitId(a.visita_id)}>
+                🔍 Ver visita #{a.visita_id}
+              </button>
 
               {/* Foto */}
               {a.foto_path && (
@@ -126,7 +136,22 @@ export default function AdminAlerts() {
                 </a>
               )}
 
-              {/* ── Caso A: Sin detección — foto no es un medidor ── */}
+              {/* ── Caso A: Sin acceso al medidor ── */}
+              {sinAcceso && (
+                <div className={styles.sinAccesoBox}>
+                  <div className={styles.sinDeteccionTitle}>
+                    🚫 El auditor no pudo acceder a este medidor
+                  </div>
+                  {a.motivo_sin_acceso && (
+                    <div className={styles.sinDeteccionNota}>💬 {a.motivo_sin_acceso}</div>
+                  )}
+                  <div className={styles.sinDeteccionDesc}>
+                    Puedes aprobar la visita si el motivo es válido, o rechazarla para que el auditor vuelva a intentarlo.
+                  </div>
+                </div>
+              )}
+
+              {/* ── Caso B: Sin detección — foto no es un medidor ── */}
               {sinDet && (
                 <div className={styles.sinDeteccionBox}>
                   <div className={styles.sinDeteccionTitle}>
@@ -229,15 +254,35 @@ export default function AdminAlerts() {
               {/* Botones iniciales (sin formulario abierto) */}
               {!isEditing && !isRejecting && (
                 <div className={styles.actionRow}>
-                  {sinDet ? (
-                    /* Foto incorrecta: dos opciones */
+                  {sinAcceso ? (
+                    /* Sin acceso: aprobar o rechazar */
+                    <>
+                      <button
+                        className={styles.btnAprobar}
+                        onClick={async () => {
+                          await api.patch(`/admin/visits/${a.visita_id}/estado`, { estado: 'aprobada', motivo_rechazo: null });
+                          load();
+                        }}
+                      >
+                        ✓ Aprobar visita
+                      </button>
+                      <button
+                        className={styles.btnRechazar}
+                        onClick={() => setRejecting({
+                          visita_id:  a.visita_id,
+                          tipo:       a.tipo,
+                          medidor_id: a.medidor_id,
+                        })}
+                      >
+                        ↩ Rechazar visita
+                      </button>
+                    </>
+                  ) : sinDet ? (
+                    /* Foto incorrecta: ingresar lectura o rechazar */
                     <>
                       <button
                         className={styles.btnManual}
-                        onClick={() => {
-                          setEditing(a.medidor_id);
-                          setNewVal('');
-                        }}
+                        onClick={() => { setEditing(a.medidor_id); setNewVal(''); }}
                       >
                         📝 Ingresar lectura manualmente
                       </button>
@@ -270,6 +315,14 @@ export default function AdminAlerts() {
           );
         })}
       </div>
+
+      {viewVisitId && (
+        <VisitModal
+          visitId={viewVisitId}
+          onClose={() => setViewVisitId(null)}
+          onUpdated={() => { setViewVisitId(null); load(); }}
+        />
+      )}
     </div>
   );
 }

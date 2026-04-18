@@ -8,7 +8,9 @@ function formatDuracion(inicio, fin) {
   if (!inicio || !fin) return null;
   const ms = new Date(fin) - new Date(inicio);
   if (ms <= 0) return null;
-  const min = Math.round(ms / 60000);
+  const seg = Math.round(ms / 1000);
+  if (seg < 60) return `${seg} seg`;
+  const min = Math.floor(seg / 60);
   if (min < 60) return `${min} min`;
   const h = Math.floor(min / 60);
   const m = min % 60;

@@ -10,7 +10,9 @@ function calcDuracion(inicio, fin) {
   if (!inicio || !fin) return '';
   const ms = new Date(fin) - new Date(inicio);
   if (ms <= 0) return '';
-  const min = Math.round(ms / 60000);
+  const seg = Math.round(ms / 1000);
+  if (seg < 60) return `${seg} seg`;
+  const min = Math.floor(seg / 60);
   if (min < 60) return `${min} min`;
   const h = Math.floor(min / 60);
   const m = min % 60;
@@ -50,7 +52,7 @@ router.get('/excel', authMiddleware, requireRole('admin'), ah(async (req, res) =
   let medidoresMap = {};
   if (visitaIds.length) {
     const [medidores] = await pool.query(
-      `SELECT visita_id, tipo, foto_path, lectura_confirmada, confianza_ocr, requiere_revision
+      `SELECT visita_id, tipo, foto_path, lectura_confirmada, confianza_ocr, requiere_revision, sin_acceso, motivo_sin_acceso
        FROM medidores WHERE visita_id IN (?)`,
       [visitaIds]
     );
@@ -78,14 +80,20 @@ router.get('/excel', authMiddleware, requireRole('admin'), ah(async (req, res) =
     { header: 'Latitud',          key: 'latitud',           width: 13 },
     { header: 'Longitud',         key: 'longitud',          width: 13 },
     { header: 'Lect. Luz',        key: 'lectura_luz',       width: 13 },
+    { header: 'Sin Acceso Luz',   key: 'sin_acceso_luz',    width: 14 },
+    { header: 'Motivo Luz',       key: 'motivo_luz',        width: 30 },
     { header: 'Foto Luz',         key: 'foto_luz_nombre',   width: 34 },
     { header: 'Link Foto Luz',    key: 'foto_luz_link',     width: 50 },
     { header: 'Confianza Luz',    key: 'conf_luz',          width: 13 },
     { header: 'Lect. Agua',       key: 'lectura_agua',      width: 13 },
+    { header: 'Sin Acceso Agua',  key: 'sin_acceso_agua',   width: 14 },
+    { header: 'Motivo Agua',      key: 'motivo_agua',       width: 30 },
     { header: 'Foto Agua',        key: 'foto_agua_nombre',  width: 34 },
     { header: 'Link Foto Agua',   key: 'foto_agua_link',    width: 50 },
     { header: 'Confianza Agua',   key: 'conf_agua',         width: 13 },
     { header: 'Lect. Gas',        key: 'lectura_gas',       width: 13 },
+    { header: 'Sin Acceso Gas',   key: 'sin_acceso_gas',    width: 14 },
+    { header: 'Motivo Gas',       key: 'motivo_gas',        width: 30 },
     { header: 'Foto Gas',         key: 'foto_gas_nombre',   width: 34 },
     { header: 'Link Foto Gas',    key: 'foto_gas_link',     width: 50 },
     { header: 'Confianza Gas',    key: 'conf_gas',          width: 13 },
@@ -125,18 +133,24 @@ router.get('/excel', authMiddleware, requireRole('admin'), ah(async (req, res) =
       auditor:         v.auditor,
       latitud:         v.latitud  ?? '',
       longitud:        v.longitud ?? '',
-      lectura_luz:     med.luz?.lectura_confirmada  ?? '',
-      foto_luz_nombre: med.luz?.foto_path           ?? '',
+      lectura_luz:     med.luz?.lectura_confirmada   ?? '',
+      sin_acceso_luz:  med.luz?.sin_acceso ? 'Sí' : '',
+      motivo_luz:      med.luz?.motivo_sin_acceso   ?? '',
+      foto_luz_nombre: med.luz?.foto_path            ?? '',
       foto_luz_link:   fotoLink('luz'),
-      conf_luz:        med.luz?.confianza_ocr        ?? '',
-      lectura_agua:    med.agua?.lectura_confirmada ?? '',
-      foto_agua_nombre:med.agua?.foto_path          ?? '',
+      conf_luz:        med.luz?.confianza_ocr         ?? '',
+      lectura_agua:    med.agua?.lectura_confirmada  ?? '',
+      sin_acceso_agua: med.agua?.sin_acceso ? 'Sí' : '',
+      motivo_agua:     med.agua?.motivo_sin_acceso   ?? '',
+      foto_agua_nombre:med.agua?.foto_path           ?? '',
       foto_agua_link:  fotoLink('agua'),
-      conf_agua:       med.agua?.confianza_ocr       ?? '',
-      lectura_gas:     med.gas?.lectura_confirmada  ?? '',
-      foto_gas_nombre: med.gas?.foto_path           ?? '',
+      conf_agua:       med.agua?.confianza_ocr        ?? '',
+      lectura_gas:     med.gas?.lectura_confirmada   ?? '',
+      sin_acceso_gas:  med.gas?.sin_acceso ? 'Sí' : '',
+      motivo_gas:      med.gas?.motivo_sin_acceso    ?? '',
+      foto_gas_nombre: med.gas?.foto_path            ?? '',
       foto_gas_link:   fotoLink('gas'),
-      conf_gas:        med.gas?.confianza_ocr        ?? '',
+      conf_gas:        med.gas?.confianza_ocr         ?? '',
       observaciones:   v.observaciones ?? '',
       estado:          v.estado ?? 'pendiente',
       motivo_rechazo:  v.motivo_rechazo ?? '',
