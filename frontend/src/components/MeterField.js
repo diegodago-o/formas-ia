@@ -110,11 +110,12 @@ export default function MeterField({ tipo, data, onChange, onFile, isOnline = tr
         es_medidor:     result.es_medidor,
       });
 
-      if (result.calidad_foto === 'mala') setFotoMala(true);
-      if (!result.lectura && result.calidad_foto !== 'mala') setEditando(true);
+      if (result.calidad_foto === 'mala' || result.es_medidor === false) setFotoMala(true);
+      else if (!result.lectura) setEditando(true);
     } catch {
-      setOcrResult({ lectura: null, confianza: 'baja', calidad_foto: 'mala', nota: 'Error al procesar' });
-      setFotoMala(true);
+      // Error de red o servidor — no bloquear con fotoMala, permitir entrada manual
+      setOcrResult({ lectura: null, confianza: 'baja', calidad_foto: 'buena', nota: 'No se pudo conectar con el servidor de análisis', es_medidor: true });
+      setEditando(true);
     } finally {
       setOcrLoading(false);
     }
@@ -330,7 +331,9 @@ export default function MeterField({ tipo, data, onChange, onFile, isOnline = tr
               ? `IA leyó "${ocrResult.lectura}" — ingresa el valor correcto:`
               : data.lectura
                 ? `Lectura actual: "${data.lectura}" — puedes corregirla:`
-                : 'Sin conexión — ingresa la lectura manualmente:'}
+                : isOnline
+                  ? 'La IA no pudo leer el medidor — ingresa la lectura manualmente:'
+                  : 'Sin conexión — ingresa la lectura manualmente:'}
           </label>
           <div className={styles.inputRow}>
             <input

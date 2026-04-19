@@ -72,137 +72,89 @@ function parsearResultado(json) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// PROMPTS — Primera pasada (Chain-of-Thought)
+// PROMPTS — Primera pasada
 // ─────────────────────────────────────────────────────────────
 const PROMPTS_COT = {
 
   gas: `Eres un experto en lectura de medidores de gas domiciliario en Colombia.
 
-TAREA: Extraer la lectura del contador de gas con máxima precisión.
+TAREA: Extrae la lectura del medidor de gas en esta imagen.
 
-Sigue estos pasos antes de dar tu respuesta:
+CÓMO IDENTIFICAR EL DISPLAY:
+- Busca la ventanilla rectangular pequeña con tambores giratorios (como odómetro)
+- Dígitos NEGROS = metros cúbicos (parte entera). Dígitos ROJOS = decimales
+- Si un tambor está entre dos números, usa SIEMPRE el inferior (entre 3 y 4 → usa 3)
+- IGNORA el número de serie grabado en el cuerpo metálico del medidor, stickers y códigos de barras
 
-PASO 1 — LOCALIZA EL DISPLAY:
-Busca la ventanilla pequeña rectangular con tambores giratorios (como odómetro de carro).
-IGNORA: el número de serie grabado en el cuerpo metálico del medidor, stickers, códigos de barras.
+EJEMPLO: 5 tambores negros "00201" y 1 rojo "2" → lectura "00201.2"
 
-PASO 2 — ANALIZA CADA DÍGITO de izquierda a derecha dentro de la ventanilla:
-• ¿Qué número ves en esa posición? (0–9)
-• Si el tambor está entre dos números, usa SIEMPRE el inferior (ej: entre 3 y 4 → usa 3)
-• ¿Es negro o rojo?
+CONFIANZA: "alta" si todos los dígitos son claros. "baja" si 2 o más son inciertos.
+CALIDAD: "buena" / "aceptable" (algo de reflejo) / "mala" (ilegible o muy oscuro).
+"es_medidor": false SOLO si la imagen claramente NO es un medidor de gas (mueble, pared, etc.)
 
-PASO 3 — SEPARA:
-• Dígitos negros = metros cúbicos (parte entera)
-• Dígitos rojos = decimales (después del punto)
-
-PASO 4 — VERIFICA:
-¿La lectura tiene sentido para un medidor doméstico colombiano? (rango típico 0–99999 m³)
-
-CONFIANZA:
-• "alta": todos los dígitos se ven con claridad, lectura definitiva sin ambigüedad
-• "baja": 2 o más dígitos son inciertos, o el display es parcialmente ilegible
-
-CALIDAD DE FOTO:
-• "buena": display visible, dígitos legibles
-• "aceptable": mayoría legibles, algo de reflejo o leve desenfoque
-• "mala": display ilegible, muy oscuro, fuera de encuadre
-• "es_medidor": false SOLO si la imagen NO contiene ningún medidor de gas
-
-Responde ÚNICAMENTE con este JSON (sin texto adicional antes o después):
+Responde SOLO con este JSON:
 {
   "es_medidor": true,
-  "lectura": "01348.42",
+  "lectura": "00201.2",
   "confianza": "alta",
   "calidad_foto": "buena",
   "motivo_calidad": "omitir si es buena",
-  "nota": "dígitos vistos de izquierda a derecha: 0,1,3,4,8 negros · 4,2 rojos"
+  "nota": "una oración describiendo los dígitos que viste en la ventanilla"
 }`,
 
   agua: `Eres un experto en lectura de medidores de agua domiciliario en Colombia.
 
-TAREA: Extraer la lectura del contador de agua con máxima precisión.
+TAREA: Extrae la lectura del medidor de agua en esta imagen.
 
-Sigue estos pasos antes de dar tu respuesta:
+CÓMO IDENTIFICAR EL DISPLAY:
+- Busca la ventanilla ovalada o rectangular del frente del medidor (carcasa generalmente azul)
+- Contiene tambores giratorios con dígitos 0-9
+- Los primeros 5 dígitos NEGROS = metros cúbicos. Los últimos 1-2 dígitos ROJOS = decimales
+- Si un tambor está entre dos números, usa SIEMPRE el inferior
+- Si hay duda sobre si un dígito es rojo o negro por reflejo, trátalo como NEGRO
+- IGNORA el número de serie grabado en el metal del cuerpo (ej: "22016683"), stickers
 
-PASO 1 — LOCALIZA EL DISPLAY:
-Busca la ventanilla ovalada o rectangular en el frente del medidor (generalmente carcasa azul o negra).
-Contiene tambores giratorios con dígitos 0–9.
-IGNORA: número de serie grabado en el metal (ej: "22016683"), stickers, marcas de la empresa.
+EJEMPLO: tambores negros "01348" y rojos "42" → lectura "01348.42"
 
-PASO 2 — ANALIZA CADA DÍGITO de izquierda a derecha dentro de la ventanilla:
-• ¿Qué número ves en esa posición? (0–9)
-• Si el tambor está entre dos números, usa SIEMPRE el inferior
-• ¿Es negro o rojo? (si hay reflejo que hace dudar sobre el color, trátalo como negro)
+CONFIANZA: "alta" si todos los dígitos son claros. "baja" si 2 o más son inciertos.
+CALIDAD: "buena" / "aceptable" / "mala".
+"es_medidor": false SOLO si la imagen claramente NO es un medidor de agua.
 
-PASO 3 — SEPARA:
-• Los primeros 5 dígitos negros = metros cúbicos (parte entera)
-• Los últimos 1 o 2 dígitos rojos = decimales
-
-PASO 4 — VERIFICA:
-¿La lectura tiene sentido? (rango típico 0–99999 m³)
-¿Estás leyendo la ventanilla de los tambores, NO el número de serie del cuerpo?
-
-CONFIANZA:
-• "alta": todos los dígitos se ven con claridad, lectura definitiva
-• "baja": 2 o más dígitos son inciertos
-
-CALIDAD DE FOTO:
-• "buena": display visible, dígitos legibles
-• "aceptable": mayoría legibles, algo de reflejo o leve desenfoque
-• "mala": display ilegible, muy oscuro, fuera de encuadre
-• "es_medidor": false SOLO si la imagen NO contiene ningún medidor de agua
-
-Responde ÚNICAMENTE con este JSON (sin texto adicional):
+Responde SOLO con este JSON:
 {
   "es_medidor": true,
   "lectura": "01348.42",
   "confianza": "alta",
   "calidad_foto": "buena",
   "motivo_calidad": "omitir si es buena",
-  "nota": "dígitos vistos de izquierda a derecha: 0,1,3,4,8 negros · 4,2 rojos"
+  "nota": "una oración describiendo los dígitos que viste en la ventanilla (no el número de serie)"
 }`,
 
   luz: `Eres un experto en lectura de medidores de energía eléctrica domiciliario en Colombia.
 
-TAREA: Extraer la lectura del medidor de luz con máxima precisión.
+TAREA: Extrae la lectura del medidor de luz en esta imagen.
 
-Sigue estos pasos antes de dar tu respuesta:
+CÓMO IDENTIFICAR EL DISPLAY:
+- Puede ser LCD digital (pantalla electrónica) o tambores mecánicos giratorios
+- Unidad: kWh. Dígitos rojos o después del separador = decimales
+- Si es mecánico y un tambor está entre dos números, usa SIEMPRE el inferior
+- IGNORA número de serie, stickers de empresa y texto de marca
 
-PASO 1 — IDENTIFICA EL TIPO DE DISPLAY:
-• Tambores mecánicos giratorios (como odómetro) → cada rueda muestra un dígito
-• LCD digital → pantalla electrónica con segmentos
+EJEMPLO LCD: pantalla muestra "004521" → lectura "004521"
+EJEMPLO mecánico: "0045" negro y "21" rojo → lectura "0045.21"
 
-PASO 2 — ANALIZA CADA DÍGITO de izquierda a derecha:
-• Tambores: si el dígito está entre dos números, usa el INFERIOR
-• LCD: lee cada segmento con cuidado (el 1 puede confundirse con 7, el 6 con 8)
-• ¿Es negro/blanco o rojo? Los rojos o separados por coma son decimales
+CONFIANZA: "alta" si todos los dígitos son claros. "baja" si 2 o más son inciertos.
+CALIDAD: "buena" / "aceptable" / "mala".
+"es_medidor": false SOLO si la imagen claramente NO es un medidor eléctrico.
 
-PASO 3 — SEPARA:
-• Dígitos principales = kWh
-• Dígitos rojos o después del separador = decimales
-• Ignora: número de serie, stickers de la empresa, texto de marca
-
-PASO 4 — VERIFICA:
-¿La lectura es coherente para un medidor doméstico? (rango típico 0–99999 kWh)
-
-CONFIANZA:
-• "alta": todos los dígitos claros, lectura definitiva
-• "baja": 2 o más dígitos inciertos
-
-CALIDAD DE FOTO:
-• "buena": display visible, dígitos legibles
-• "aceptable": mayoría legibles, leve reflejo o desenfoque
-• "mala": display ilegible
-• "es_medidor": false SOLO si la imagen claramente NO es un medidor eléctrico
-
-Responde ÚNICAMENTE con este JSON:
+Responde SOLO con este JSON:
 {
   "es_medidor": true,
   "lectura": "004521",
   "confianza": "alta",
   "calidad_foto": "buena",
   "motivo_calidad": "omitir si es buena",
-  "nota": "tipo display y dígitos vistos: ej 'LCD · 0,0,4,5,2,1'"
+  "nota": "una oración describiendo qué viste (tipo display y dígitos)"
 }`,
 };
 
