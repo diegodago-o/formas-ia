@@ -83,11 +83,12 @@ TAREA: Extrae la lectura del medidor de gas en esta imagen.
 
 CÓMO IDENTIFICAR EL DISPLAY:
 - Busca la ventanilla rectangular pequeña con tambores giratorios (como odómetro)
-- Dígitos NEGROS = metros cúbicos (parte entera). Dígitos ROJOS = decimales
+- Dígitos NEGROS = metros cúbicos (parte entera): exactamente 5 dígitos. Dígitos ROJOS = decimales: exactamente 3 dígitos
+- Formato siempre: NNNNN.NNN (ej: 00201.234)
 - Si un tambor está entre dos números, usa SIEMPRE el inferior (entre 3 y 4 → usa 3)
 - IGNORA el número de serie grabado en el cuerpo metálico del medidor, stickers y códigos de barras
 
-EJEMPLO: 5 tambores negros "00201" y 1 rojo "2" → lectura "00201.2"
+EJEMPLO: 5 tambores negros "00201" y 3 rojos "234" → lectura "00201.234"
 
 CONFIANZA: "alta" si todos los dígitos son claros. "baja" si 2 o más son inciertos.
 CALIDAD: "buena" / "aceptable" (algo de reflejo) / "mala" (ilegible o muy oscuro).
@@ -97,7 +98,7 @@ Si calidad es "aceptable" o "mala", agrega el campo "motivo_calidad" con una fra
 Responde SOLO con este JSON (sin texto adicional):
 {
   "es_medidor": true,
-  "lectura": "00201.2",
+  "lectura": "00201.234",
   "confianza": "alta",
   "calidad_foto": "buena",
   "nota": "una oración describiendo los dígitos que viste en la ventanilla"
@@ -110,12 +111,13 @@ TAREA: Extrae la lectura del medidor de agua en esta imagen.
 CÓMO IDENTIFICAR EL DISPLAY:
 - Busca la ventanilla ovalada o rectangular del frente del medidor (carcasa generalmente azul)
 - Contiene tambores giratorios con dígitos 0-9
-- Los primeros 5 dígitos NEGROS = metros cúbicos. Los últimos 1-2 dígitos ROJOS = decimales
+- Los primeros 4 dígitos NEGROS = metros cúbicos (parte entera). Los últimos 4 dígitos ROJOS = decimales
+- Formato siempre: NNNN.NNNN (ej: 0134.8423)
 - Si un tambor está entre dos números, usa SIEMPRE el inferior
 - Si hay duda sobre si un dígito es rojo o negro por reflejo, trátalo como NEGRO
 - IGNORA el número de serie grabado en el metal del cuerpo (ej: "22016683"), stickers
 
-EJEMPLO: tambores negros "01348" y rojos "42" → lectura "01348.42"
+EJEMPLO: tambores negros "0134" y rojos "8423" → lectura "0134.8423"
 
 CONFIANZA: "alta" si todos los dígitos son claros. "baja" si 2 o más son inciertos.
 CALIDAD: "buena" / "aceptable" / "mala".
@@ -125,7 +127,7 @@ Si calidad es "aceptable" o "mala", agrega el campo "motivo_calidad" con una fra
 Responde SOLO con este JSON (sin texto adicional):
 {
   "es_medidor": true,
-  "lectura": "01348.42",
+  "lectura": "0134.8423",
   "confianza": "alta",
   "calidad_foto": "buena",
   "nota": "una oración describiendo los dígitos que viste en la ventanilla (no el número de serie)"
@@ -137,12 +139,13 @@ TAREA: Extrae la lectura del medidor de luz en esta imagen.
 
 CÓMO IDENTIFICAR EL DISPLAY:
 - Puede ser LCD digital (pantalla electrónica) o tambores mecánicos giratorios
-- Unidad: kWh. Dígitos rojos o después del separador = decimales
+- Unidad: kWh. Exactamente 5 dígitos enteros y 3 decimales (rojos o después del separador)
+- Formato siempre: NNNNN.NNN (ej: 00452.123)
 - Si es mecánico y un tambor está entre dos números, usa SIEMPRE el inferior
 - IGNORA número de serie, stickers de empresa y texto de marca
 
-EJEMPLO LCD: pantalla muestra "004521" → lectura "004521"
-EJEMPLO mecánico: "0045" negro y "21" rojo → lectura "0045.21"
+EJEMPLO LCD: pantalla muestra "00452123" → lectura "00452.123"
+EJEMPLO mecánico: 5 tambores negros "00452" y 3 rojos "123" → lectura "00452.123"
 
 CONFIANZA: "alta" si todos los dígitos son claros. "baja" si 2 o más son inciertos.
 CALIDAD: "buena" / "aceptable" / "mala".
@@ -152,7 +155,7 @@ Si calidad es "aceptable" o "mala", agrega el campo "motivo_calidad" con una fra
 Responde SOLO con este JSON (sin texto adicional):
 {
   "es_medidor": true,
-  "lectura": "004521",
+  "lectura": "00452.123",
   "confianza": "alta",
   "calidad_foto": "buena",
   "nota": "una oración describiendo qué viste (tipo display y dígitos)"
