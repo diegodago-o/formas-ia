@@ -23,11 +23,13 @@ export default function MeterField({ tipo, data, onChange, onFile, isOnline = tr
   const inputRef = useRef();
   const meta     = META[tipo];
 
-  const [uploading,   setUploading]   = useState(false);
-  const [imgLoading,  setImgLoading]  = useState(() => !!data.preview);
-  const [imgError,    setImgError]    = useState(false);
-  const [sinAcceso,   setSinAcceso]   = useState(() => data.sin_acceso ? true : false);
-  const [motivoAcceso, setMotivoAcceso] = useState(() => data.motivo_sin_acceso || '');
+  const [uploading,      setUploading]      = useState(false);
+  const [imgLoading,     setImgLoading]     = useState(() => !!data.preview);
+  const [imgError,       setImgError]       = useState(false);
+  const [sinAcceso,      setSinAcceso]      = useState(() => data.sin_acceso ? true : false);
+  const [motivoAcceso,   setMotivoAcceso]   = useState(() => data.motivo_sin_acceso || '');
+  // lecturaSaved: true cuando el auditor confirmó la lectura con el botón Guardar
+  const [lecturaSaved,   setLecturaSaved]   = useState(() => !!data.lectura);
 
   const handleFile = async e => {
     const file = e.target.files[0];
@@ -38,6 +40,7 @@ export default function MeterField({ tipo, data, onChange, onFile, isOnline = tr
     onChange('foto_path', null);
     setImgLoading(true);
     setImgError(false);
+    setLecturaSaved(false);
     setSinAcceso(false);
     setMotivoAcceso('');
     onChange('sin_acceso', false);
@@ -49,12 +52,10 @@ export default function MeterField({ tipo, data, onChange, onFile, isOnline = tr
     onFile?.(fileToUpload);
 
     if (!isOnline) {
-      // Offline: guardar archivo local, el auditor ingresa lectura manual
       onChange('foto', fileToUpload);
       return;
     }
 
-    // Online: subir foto, obtener foto_path
     setUploading(true);
     try {
       const formData = new FormData();
@@ -64,7 +65,6 @@ export default function MeterField({ tipo, data, onChange, onFile, isOnline = tr
       });
       onChange('foto_path', result.foto_path);
     } catch {
-      // Fallo de red: guardar archivo local para sync offline
       onChange('foto', fileToUpload);
     } finally {
       setUploading(false);
@@ -76,6 +76,7 @@ export default function MeterField({ tipo, data, onChange, onFile, isOnline = tr
     onChange('preview', null);
     onChange('lectura', '');
     onChange('foto_path', null);
+    setLecturaSaved(false);
     if (inputRef.current) inputRef.current.value = '';
   };
 
@@ -120,7 +121,7 @@ export default function MeterField({ tipo, data, onChange, onFile, isOnline = tr
         <span className={styles.label}>{meta.label}</span>
       </div>
 
-      {/* Foto o botón para tomar */}
+      {/* Foto o botones de captura */}
       {data.preview ? (
         <div className={styles.previewWrap}>
           {imgLoading && !imgError && <div className={styles.imgSkeleton} />}
@@ -211,32 +212,45 @@ export default function MeterField({ tipo, data, onChange, onFile, isOnline = tr
         </div>
       )}
 
-      {/* Lectura: siempre visible cuando hay foto */}
-      {data.preview && !uploading && (
-        <div className={styles.manualFallback}>
-          <label>Ingresa la lectura del medidor:</label>
-          <input
-            type="text"
-            inputMode="decimal"
-            value={data.lectura}
-            onChange={e => onChange('lectura', e.target.value)}
-            placeholder="Ej: 00201.2"
-            autoFocus
-          />
+      {/* Lectura confirmada → vista verde con botón Editar */}
+      {data.preview && !uploading && lecturaSaved && data.lectura && (
+        <div className={styles.resultOk}>
+          <div className={styles.resultRow}>
+            <div className={styles.resultValor}>
+              <span className={styles.resultLabel}>Lectura registrada</span>
+              <span className={styles.resultNum}>{data.lectura}</span>
+            </div>
+            <button
+              className={styles.btnCorregir}
+              onClick={() => setLecturaSaved(false)}
+            >
+              ✏️ Editar
+            </button>
+          </div>
         </div>
       )}
 
-      {/* Sin foto: campo manual simple */}
-      {!data.preview && !uploading && sinAcceso !== 'seleccionar' && (
-        <div className={styles.manualFallback}>
-          <label>O ingresa la lectura manualmente:</label>
-          <input
-            type="text"
-            inputMode="decimal"
-            value={data.lectura}
-            onChange={e => onChange('lectura', e.target.value)}
-            placeholder="Ej: 00201.2"
-          />
+      {/* Lectura: input + botón Guardar */}
+      {data.preview && !uploading && !lecturaSaved && (
+        <div className={styles.editBox}>
+          <label className={styles.editLabel}>Ingresa la lectura del medidor:</label>
+          <div className={styles.inputRow}>
+            <input
+              type="text"
+              inputMode="decimal"
+              value={data.lectura}
+              onChange={e => onChange('lectura', e.target.value)}
+              placeholder="Ej: 00201.234"
+              autoFocus
+            />
+            <button
+              className={styles.btnGuardar}
+              onClick={() => setLecturaSaved(true)}
+              disabled={!data.lectura}
+            >
+              ✓
+            </button>
+          </div>
         </div>
       )}
     </div>

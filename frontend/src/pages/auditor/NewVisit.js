@@ -293,7 +293,7 @@ export default function NewVisit() {
   };
 
   const canNext = () => {
-    if (step === 0) return ciudadId && conjuntoId && apartamento.trim();
+    if (step === 0) return ciudadId && conjuntoId && apartamento.trim() && latitud;
     return true;
   };
 
@@ -538,6 +538,12 @@ export default function NewVisit() {
               <button className={styles.btnLastGps} onClick={useLastGPS}>
                 Usar última ubicación conocida
               </button>
+            </div>
+          )}
+
+          {!latitud && (
+            <div className={styles.gpsRequired}>
+              📍 La georreferenciación es obligatoria — presiona "Capturar ubicación GPS" antes de continuar.
             </div>
           )}
 

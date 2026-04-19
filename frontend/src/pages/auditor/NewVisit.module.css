@@ -112,6 +112,15 @@
 
 /* GPS última ubicación */
 .gpsWarn { font-size: 0.82rem; color: #92400E; font-weight: 600; }
+.gpsRequired {
+  background: #FEF2F2;
+  border: 1.5px solid #FCA5A5;
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  font-size: 0.85rem;
+  color: #991B1B;
+  font-weight: 500;
+}
 .lastGpsBox {
   background: #FEF3C7;
   border: 1.5px solid #FCD34D;
