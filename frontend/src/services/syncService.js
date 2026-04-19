@@ -2,12 +2,17 @@
  * syncService.js
  * Sube al servidor las visitas guardadas localmente mientras no había conexión.
  *
- * Flujo por visita pendiente:
- *  1. Por cada medidor con foto_base64 o foto_file: POST /visits/ocr-preview
- *     → sube la foto, corre OCR, devuelve foto_path + resultado
- *  2. Si OCR difiere del valor ingresado manualmente → requiere_revision = true
- *  3. POST /visits con todos los datos → visita creada en servidor
- *  4. Eliminar de IndexedDB
+ * Soporta visitas mixtas (fotos tomadas online + offline en la misma visita):
+ *
+ * CASO A — foto_path existe: foto ya subida al servidor en sesión online.
+ *   → Reutilizar directamente. NO re-subir (el archivo ya existe en uploads/).
+ *   → Los metadatos OCR ya están en el objeto (vienen del ocr_meta spread).
+ *
+ * CASO B — sin foto_path pero con foto_base64 / foto_file: foto tomada offline.
+ *   → Subir ahora, correr OCR y obtener foto_path nuevo.
+ *
+ * CASO C — sin foto_path ni archivo local: entrada manual o sin_acceso.
+ *   → Guardar lectura/sin_acceso sin foto.
  */
 
 import api from './api';
@@ -28,25 +33,42 @@ export async function syncPendingVisits(onProgress) {
         await updatePendingVisit(visit.localId, { status: 'syncing' });
         onProgress?.({ type: 'start', localId: visit.localId });
 
-        // ── Paso 1: subir fotos y correr OCR por cada medidor ──────────
+        // ── Paso 1: resolver cada medidor según su origen ──────────────
         const medidoresResueltos = {};
 
         for (const tipo of ['luz', 'agua', 'gas']) {
           const m = visit.medidores?.[tipo];
           if (!m) continue;
 
-          const tieneReferencia = m.foto_file || m.foto_base64;
+          // ── CASO A: foto ya subida en sesión online ────────────────────
+          if (m.foto_path) {
+            // El archivo ya existe en el servidor — reutilizar path y metadatos OCR
+            medidoresResueltos[tipo] = {
+              foto_path:         m.foto_path,
+              lectura:           m.lectura           || null,
+              lectura_ocr:       m.lectura_ocr       || null,
+              confianza_ocr:     m.confianza_ocr     || null,
+              calidad_foto:      m.calidad_foto       || 'buena',
+              motivo_calidad:    m.motivo_calidad     || null,
+              nota_ocr:          m.nota_ocr           || null,
+              es_medidor:        m.es_medidor         !== undefined ? m.es_medidor : true,
+              sin_acceso:        m.sin_acceso         || false,
+              motivo_sin_acceso: m.motivo_sin_acceso  || null,
+            };
+            continue;
+          }
 
-          if (tieneReferencia) {
-            // Intentar reconstruir el Blob y subir; si falla, guardar sin foto
+          // ── CASO B: foto tomada offline → subir y correr OCR ──────────
+          const tieneArchivoLocal = m.foto_file || m.foto_base64;
+
+          if (tieneArchivoLocal) {
             let uploadedOcr = null;
             try {
               const formData = new FormData();
               if (m.foto_base64) {
-                // data URL string → Blob (almacenado como string para sobrevivir IDB en móviles)
                 const res  = await fetch(m.foto_base64);
                 const blob = await res.blob();
-                if (blob.size === 0) throw new Error('blob vacío al reconstruir desde base64');
+                if (blob.size === 0) throw new Error('blob vacío');
                 formData.append('foto', blob, `${tipo}_${Date.now()}.jpg`);
               } else {
                 formData.append('foto', m.foto_file, `${tipo}_${Date.now()}.jpg`);
@@ -59,15 +81,11 @@ export async function syncPendingVisits(onProgress) {
               uploadedOcr = ocrResult;
             } catch (photoErr) {
               console.warn(`[sync] No se pudo subir foto de ${tipo}:`, photoErr.message);
-              // Continúa sin foto — el medidor se guarda con lectura manual si la hay
             }
 
             if (uploadedOcr) {
-              const discrepancia =
-                uploadedOcr.lectura &&
-                m.lectura &&
-                uploadedOcr.lectura !== m.lectura;
-              const noEsMedidor = uploadedOcr.es_medidor === false;
+              const discrepancia = uploadedOcr.lectura && m.lectura && uploadedOcr.lectura !== m.lectura;
+              const noEsMedidor  = uploadedOcr.es_medidor === false;
 
               medidoresResueltos[tipo] = {
                 foto_path:         uploadedOcr.foto_path,
@@ -78,26 +96,26 @@ export async function syncPendingVisits(onProgress) {
                 motivo_calidad:    uploadedOcr.motivo_calidad,
                 nota_ocr:          uploadedOcr.nota,
                 es_medidor:        uploadedOcr.es_medidor,
-                sin_acceso:        m.sin_acceso || false,
+                sin_acceso:        m.sin_acceso        || false,
                 motivo_sin_acceso: m.motivo_sin_acceso || null,
                 requiere_revision: noEsMedidor || !m.lectura || uploadedOcr.calidad_foto === 'mala' || discrepancia,
               };
             } else {
-              // Foto no subible — guardar lectura manual si existe
+              // Foto no subible — conservar lectura manual si la hay
               medidoresResueltos[tipo] = {
                 foto_path:         null,
-                lectura:           m.lectura || null,
-                sin_acceso:        m.sin_acceso || false,
+                lectura:           m.lectura           || null,
+                sin_acceso:        m.sin_acceso        || false,
                 motivo_sin_acceso: m.motivo_sin_acceso || null,
-                requiere_revision: true,
+                requiere_revision: !m.lectura && !m.sin_acceso,
               };
             }
           } else {
-            // Sin foto (manual o sin_acceso)
+            // ── CASO C: entrada manual o sin_acceso, sin foto ─────────────
             medidoresResueltos[tipo] = {
               foto_path:         null,
-              lectura:           m.lectura   || null,
-              sin_acceso:        m.sin_acceso || false,
+              lectura:           m.lectura           || null,
+              sin_acceso:        m.sin_acceso        || false,
               motivo_sin_acceso: m.motivo_sin_acceso || null,
               requiere_revision: !m.lectura && !m.sin_acceso,
             };
