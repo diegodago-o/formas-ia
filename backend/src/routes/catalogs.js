@@ -1,7 +1,11 @@
 const router = require('express').Router();
+const multer = require('multer');
+const ExcelJS = require('exceljs');
 const { pool } = require('../models/db');
 const { authMiddleware, requireRole } = require('../middleware/auth');
 const ah = require('../middleware/asyncHandler');
+
+const memUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
 
 // ── Ciudades ──────────────────────────────────────────────────────────────────
 
@@ -94,6 +98,89 @@ router.post('/torres', authMiddleware, requireRole('admin'), ah(async (req, res)
     [nombre.trim(), conjunto_id]
   );
   res.status(201).json({ id: result.insertId, nombre, conjunto_id });
+}));
+
+// POST /api/catalogs/import  — importar desde Excel (ciudad | conjunto | torre)
+router.post('/import', authMiddleware, requireRole('admin'), memUpload.single('file'), ah(async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'Archivo requerido' });
+
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load(req.file.buffer);
+  const sheet = workbook.worksheets[0];
+
+  const created = { ciudades: 0, conjuntos: 0, torres: 0 };
+  const errors  = [];
+
+  // Cache local para evitar N+1 queries
+  const ciudadCache   = {};
+  const conjuntoCache = {};
+
+  let rowNum = 0;
+  for (const row of sheet) {
+    rowNum++;
+    if (rowNum === 1) continue; // encabezado
+
+    const ciudadNombre  = row.getCell(1).text?.trim();
+    const conjNombre    = row.getCell(2).text?.trim();
+    const torreNombre   = row.getCell(3).text?.trim();
+
+    if (!ciudadNombre || !conjNombre) {
+      if (ciudadNombre || conjNombre || torreNombre)
+        errors.push(`Fila ${rowNum}: ciudad y conjunto son obligatorios`);
+      continue;
+    }
+
+    try {
+      // Ciudad — get or create
+      if (!ciudadCache[ciudadNombre]) {
+        const [rows] = await pool.query('SELECT id FROM ciudades WHERE nombre = ?', [ciudadNombre]);
+        if (rows.length) {
+          ciudadCache[ciudadNombre] = rows[0].id;
+        } else {
+          const [r] = await pool.query('INSERT INTO ciudades (nombre) VALUES (?)', [ciudadNombre]);
+          ciudadCache[ciudadNombre] = r.insertId;
+          created.ciudades++;
+        }
+      }
+      const ciudadId = ciudadCache[ciudadNombre];
+
+      // Conjunto — get or create
+      const conjKey = `${ciudadId}:${conjNombre}`;
+      if (!conjuntoCache[conjKey]) {
+        const [rows] = await pool.query(
+          'SELECT id FROM conjuntos WHERE nombre = ? AND ciudad_id = ?',
+          [conjNombre, ciudadId]
+        );
+        if (rows.length) {
+          conjuntoCache[conjKey] = rows[0].id;
+        } else {
+          const [r] = await pool.query(
+            'INSERT INTO conjuntos (nombre, ciudad_id) VALUES (?, ?)',
+            [conjNombre, ciudadId]
+          );
+          conjuntoCache[conjKey] = r.insertId;
+          created.conjuntos++;
+        }
+      }
+      const conjId = conjuntoCache[conjKey];
+
+      // Torre — get or create (opcional)
+      if (torreNombre) {
+        const [rows] = await pool.query(
+          'SELECT id FROM torres WHERE nombre = ? AND conjunto_id = ?',
+          [torreNombre, conjId]
+        );
+        if (!rows.length) {
+          await pool.query('INSERT INTO torres (nombre, conjunto_id) VALUES (?, ?)', [torreNombre, conjId]);
+          created.torres++;
+        }
+      }
+    } catch (err) {
+      errors.push(`Fila ${rowNum}: ${err.message}`);
+    }
+  }
+
+  res.json({ created, errors, total_filas: rowNum - 1 });
 }));
 
 module.exports = router;
