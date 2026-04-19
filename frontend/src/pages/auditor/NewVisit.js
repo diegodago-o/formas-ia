@@ -395,34 +395,77 @@ export default function NewVisit() {
     }, {});
 
     const cleanDraft = async () => {
-      if (currentDraftId) {
-        await deleteDraft(currentDraftId).catch(() => {});
+      if (currentDraftId) await deleteDraft(currentDraftId).catch(() => {});
+    };
+
+    // Persiste como visita pendiente en IDB (offline o fallback de visita mixta).
+    // Las fotos con foto_path (ya subidas) son CASO A en sync — se reusan.
+    // Las fotos con foto_base64 son CASO B — se suben al sincronizar.
+    const guardarOffline = async () => {
+      const medidoresParaIDB = {};
+      for (const [tipo, m] of Object.entries(medidoresPayload)) {
+        let base64 = m.foto_base64 || null;
+        if (m?.foto_file && !base64) {
+          base64 = await new Promise((res, rej) => {
+            const reader = new FileReader();
+            reader.onload  = () => res(reader.result);
+            reader.onerror = rej;
+            reader.readAsDataURL(m.foto_file);
+          }).catch(() => null);
+        }
+        medidoresParaIDB[tipo] = { ...m, foto_file: null, foto_base64: base64 };
       }
+      await savePendingVisit({
+        latitud, longitud,
+        ciudad_id:   ciudadId,
+        conjunto_id: conjuntoId,
+        torre_id:    torreId || null,
+        apartamento, observaciones,
+        medidores:   medidoresParaIDB,
+        hora_inicio: horaInicioRef.current,
+        hora_fin:    new Date().toISOString(),
+        _meta: {
+          ciudadNombre:   ciudades.find(c => String(c.id) === String(ciudadId))?.nombre || '',
+          conjuntoNombre: conjuntos.find(c => String(c.id) === String(conjuntoId))?.nombre || '',
+          torreNombre:    torres.find(t => String(t.id) === String(torreId))?.nombre || '',
+        },
+      });
+      await cleanDraft();
+      setSavedOffline(true);
     };
 
     if (online) {
-      try {
-        // Subir fotos offline pendientes (foto_file o foto_base64 sin foto_path)
-        for (const tipo of ['luz', 'agua', 'gas']) {
-          const m = medidoresPayload[tipo];
-          if (!m || m.foto_path || (!m.foto_file && !m.foto_base64)) continue;
-          try {
-            const formData = new FormData();
-            if (m.foto_base64) {
-              const blob = await fetch(m.foto_base64).then(r => r.blob());
-              formData.append('foto', blob, `${tipo}_${Date.now()}.jpg`);
-            } else {
-              formData.append('foto', m.foto_file, `${tipo}_${Date.now()}.jpg`);
-            }
-            const { data: uploaded } = await api.post('/visits/upload-photo', formData, {
-              headers: { 'Content-Type': 'multipart/form-data' },
-            });
-            m.foto_path = uploaded.foto_path;
-          } catch (uploadErr) {
-            console.warn(`No se pudo subir foto offline de ${tipo}:`, uploadErr.message);
+      // Intentar subir fotos pendientes (visita mixta: algunas online, otras offline)
+      let todosSubidos = true;
+      for (const tipo of ['luz', 'agua', 'gas']) {
+        const m = medidoresPayload[tipo];
+        if (!m || m.foto_path || (!m.foto_file && !m.foto_base64)) continue;
+        try {
+          const formData = new FormData();
+          if (m.foto_base64) {
+            const blob = await fetch(m.foto_base64).then(r => r.blob());
+            formData.append('foto', blob, `${tipo}_${Date.now()}.jpg`);
+          } else {
+            formData.append('foto', m.foto_file, `${tipo}_${Date.now()}.jpg`);
           }
+          const { data: uploaded } = await api.post('/visits/upload-photo', formData, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+          });
+          m.foto_path = uploaded.foto_path;
+        } catch {
+          // Falló el upload — ya no hay conexión real; guardar todo offline
+          todosSubidos = false;
+          break;
         }
+      }
 
+      if (!todosSubidos) {
+        // Caída a offline: fotos con foto_path (CASO A) + foto_base64 (CASO B) → sync las resolverá
+        try { await guardarOffline(); } catch { setError('Error al guardar localmente'); setSubmitting(false); }
+        return;
+      }
+
+      try {
         await api.post('/visits', {
           latitud, longitud,
           ciudad_id:   ciudadId,
@@ -436,45 +479,17 @@ export default function NewVisit() {
         await cleanDraft();
         navigate('/mis-visitas');
       } catch (err) {
-        setError(err.response?.data?.error || 'Error al guardar la visita');
-        setSubmitting(false);
+        if (!err.response) {
+          // Error de red después de subir fotos → guardar offline con foto_path ya obtenidos
+          try { await guardarOffline(); } catch { setError('Error al guardar localmente'); setSubmitting(false); }
+        } else {
+          setError(err.response?.data?.error || 'Error al guardar la visita');
+          setSubmitting(false);
+        }
       }
     } else {
       try {
-        // Convertir foto_file a base64 string para almacenamiento confiable en IndexedDB.
-        // Los File/Blob objects pueden quedar vacíos al serializar en algunos navegadores móviles.
-        const medidoresParaIDB = {};
-        for (const [tipo, m] of Object.entries(medidoresPayload)) {
-          if (m?.foto_file) {
-            const base64 = await new Promise((res, rej) => {
-              const reader = new FileReader();
-              reader.onload  = () => res(reader.result); // data:image/jpeg;base64,...
-              reader.onerror = rej;
-              reader.readAsDataURL(m.foto_file);
-            }).catch(() => null);
-            medidoresParaIDB[tipo] = { ...m, foto_file: null, foto_base64: base64 };
-          } else {
-            medidoresParaIDB[tipo] = m;
-          }
-        }
-
-        await savePendingVisit({
-          latitud, longitud,
-          ciudad_id:   ciudadId,
-          conjunto_id: conjuntoId,
-          torre_id:    torreId || null,
-          apartamento, observaciones,
-          medidores:   medidoresParaIDB,
-          hora_inicio: horaInicioRef.current,
-          hora_fin:    new Date().toISOString(),
-          _meta: {
-            ciudadNombre:   ciudades.find(c => String(c.id) === String(ciudadId))?.nombre || '',
-            conjuntoNombre: conjuntos.find(c => String(c.id) === String(conjuntoId))?.nombre || '',
-            torreNombre:    torres.find(t => String(t.id) === String(torreId))?.nombre || '',
-          },
-        });
-        await cleanDraft();
-        setSavedOffline(true);
+        await guardarOffline();
       } catch {
         setError('Error al guardar localmente');
         setSubmitting(false);
