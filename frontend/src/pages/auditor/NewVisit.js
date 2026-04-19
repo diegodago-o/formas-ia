@@ -242,6 +242,9 @@ export default function NewVisit() {
     medidores, observaciones,
   ]);
 
+  // Scroll al top en cada cambio de paso
+  useEffect(() => { window.scrollTo({ top: 0, behavior: 'instant' }); }, [step]);
+
   // Último GPS conocido
   useEffect(() => { setLastGPS(getLastGPS()); }, []);
 

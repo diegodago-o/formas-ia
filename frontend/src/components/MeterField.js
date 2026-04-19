@@ -22,7 +22,9 @@ const MOTIVOS_SIN_ACCESO = [
 export default function MeterField({ tipo, data, onChange, onFile, isOnline = true }) {
   const inputRef        = useRef();
   const meta            = META[tipo];
-  const [ocrLoading, setOcrLoading] = useState(false);
+  const [ocrLoading, setOcrLoading]   = useState(false);
+  const [imgLoading, setImgLoading]   = useState(() => !!data.preview);
+  const [imgError,   setImgError]     = useState(false);
 
   // Restaurar resultado OCR desde ocr_meta guardado en el borrador
   const [ocrResult, setOcrResult] = useState(() => {
@@ -65,6 +67,8 @@ export default function MeterField({ tipo, data, onChange, onFile, isOnline = tr
     setOcrResult(null);
     setEditando(false);
     setFotoMala(false);
+    setImgLoading(true);
+    setImgError(false);
     // Si tenía "sin acceso" seleccionado, la foto lo cancela
     setSinAcceso(false);
     setMotivoAcceso('');
@@ -174,7 +178,32 @@ export default function MeterField({ tipo, data, onChange, onFile, isOnline = tr
       {/* Foto o botón para tomar */}
       {data.preview ? (
         <div className={styles.previewWrap}>
-          <img src={data.preview} alt={`Foto ${tipo}`} className={styles.preview} />
+          {imgLoading && !imgError && <div className={styles.imgSkeleton} />}
+          {imgError ? (
+            <div className={styles.imgError}>
+              <span>📷</span>
+              <span>No se pudo cargar la imagen</span>
+            </div>
+          ) : (
+            <img
+              src={data.preview}
+              alt={`Foto ${tipo}`}
+              className={styles.preview}
+              style={{ display: imgLoading ? 'none' : 'block' }}
+              onLoad={() => setImgLoading(false)}
+              onError={() => {
+                // Si la URL del servidor falla, intentar desde foto_file local
+                if (data.foto_file) {
+                  onChange('preview', URL.createObjectURL(data.foto_file));
+                  setImgLoading(true);
+                  setImgError(false);
+                } else {
+                  setImgLoading(false);
+                  setImgError(true);
+                }
+              }}
+            />
+          )}
           <button className={styles.removeBtn} onClick={remove}>✕ Cambiar foto</button>
         </div>
       ) : (
