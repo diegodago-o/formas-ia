@@ -1,184 +1,362 @@
 const OpenAI = require('openai');
-const fs = require('fs');
-const path = require('path');
+const fs     = require('fs');
+const path   = require('path');
+const os     = require('os');
+const sharp  = require('sharp');
 const logger = require('../middleware/logger');
 
-const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-5.2';
+const client      = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4o';
 
-// Bloque de evaluación de calidad de foto — igual para los 3 tipos
-const CALIDAD_INSTRUCCION = `
-EVALUACIÓN DE CALIDAD DE FOTO:
-Evalúa si la foto es válida como evidencia contractual:
-- "buena": medidor claramente visible, display bien iluminado y enfocado
-- "aceptable": display legible aunque con algo de sombra, leve reflejo o ángulo
-- "mala": foto borrosa, muy oscura, display fuera de encuadre, o simplemente no se puede ver el medidor
-Incluye motivo_calidad solo si es "aceptable" o "mala" (ej: "foto muy oscura", "display con reflejo fuerte").
-- "es_medidor": false ÚNICAMENTE si la imagen claramente NO contiene ningún medidor de servicios (ej: muestra un mueble, control remoto, persona, pared vacía, etc.). Si hay aunque sea un medidor parcialmente visible, usa true.`;
+// ─────────────────────────────────────────────────────────────
+// Preprocesamiento de imagen con Sharp
+// ─────────────────────────────────────────────────────────────
+async function preprocessImage(inputPath) {
+  const tmpPath = path.join(
+    os.tmpdir(),
+    `ocr_${Date.now()}_${path.basename(inputPath)}.jpg`
+  );
+  await sharp(inputPath)
+    .rotate()                                              // auto-rotar por EXIF
+    .resize(2048, 2048, { fit: 'inside', withoutEnlargement: true })
+    .sharpen({ sigma: 1.2 })                              // nitidez
+    .normalise({ lower: 1, upper: 99 })                  // estirar contraste
+    .jpeg({ quality: 92 })
+    .toFile(tmpPath);
+  return tmpPath;
+}
 
-const PROMPTS = {
+// ─────────────────────────────────────────────────────────────
+// Llamada al modelo — retorna JSON parseado
+// ─────────────────────────────────────────────────────────────
+async function llamarModelo(imageBuffer, mediaType, prompt) {
+  const base64 = imageBuffer.toString('base64');
+  const response = await client.chat.completions.create({
+    model: OPENAI_MODEL,
+    max_completion_tokens: 700,
+    messages: [{
+      role: 'user',
+      content: [
+        {
+          type: 'image_url',
+          image_url: { url: `data:${mediaType};base64,${base64}`, detail: 'high' },
+        },
+        { type: 'text', text: prompt },
+      ],
+    }],
+  });
+  const text = response.choices[0].message.content.trim();
+  const match = text.match(/\{[\s\S]*\}/);
+  if (!match) throw new Error('Respuesta sin JSON válido');
+  return JSON.parse(match[0]);
+}
+
+// ─────────────────────────────────────────────────────────────
+// Parsear resultado del modelo a formato estándar
+// ─────────────────────────────────────────────────────────────
+function parsearResultado(json) {
+  const calidad    = json.calidad_foto || 'buena';
+  const esMedidor  = json.es_medidor !== false;
+  const lectura    = json.lectura ?? null;
+  const confianza  = json.confianza ?? 'baja';
+  return {
+    es_medidor:        esMedidor,
+    lectura,
+    confianza,
+    calidad_foto:      calidad,
+    motivo_calidad:    json.motivo_calidad || null,
+    nota:              json.nota ?? '',
+    requiere_revision: !esMedidor || lectura === null || calidad === 'mala' || confianza === 'baja',
+  };
+}
+
+// ─────────────────────────────────────────────────────────────
+// PROMPTS — Primera pasada (Chain-of-Thought)
+// ─────────────────────────────────────────────────────────────
+const PROMPTS_COT = {
+
   gas: `Eres un experto en lectura de medidores de gas domiciliario en Colombia.
 
-TAREA: Extrae la lectura del medidor de gas en esta imagen.
+TAREA: Extraer la lectura del contador de gas con máxima precisión.
 
-CÓMO IDENTIFICAR EL DISPLAY:
-- Busca una ventanilla rectangular pequeña en la parte superior del medidor
-- Contiene tambores giratorios (como un odómetro de carro) con dígitos del 0 al 9
-- Los dígitos en NEGRO son la parte entera (m³)
-- Los dígitos en ROJO son decimales (después del punto)
-- Ignora: códigos de barras, números de serie en stickers, etiquetas adhesivas, números escritos a mano en el cuerpo del medidor
+Sigue estos pasos antes de dar tu respuesta:
 
-EJEMPLO: Si ves 5 negros "00201" y 1 rojo "2", la lectura es "00201.2"
+PASO 1 — LOCALIZA EL DISPLAY:
+Busca la ventanilla pequeña rectangular con tambores giratorios (como odómetro de carro).
+IGNORA: el número de serie grabado en el cuerpo metálico del medidor, stickers, códigos de barras.
 
-${CALIDAD_INSTRUCCION}
+PASO 2 — ANALIZA CADA DÍGITO de izquierda a derecha dentro de la ventanilla:
+• ¿Qué número ves en esa posición? (0–9)
+• Si el tambor está entre dos números, usa SIEMPRE el inferior (ej: entre 3 y 4 → usa 3)
+• ¿Es negro o rojo?
 
-Responde SOLO con este JSON (sin texto adicional):
+PASO 3 — SEPARA:
+• Dígitos negros = metros cúbicos (parte entera)
+• Dígitos rojos = decimales (después del punto)
+
+PASO 4 — VERIFICA:
+¿La lectura tiene sentido para un medidor doméstico colombiano? (rango típico 0–99999 m³)
+
+CONFIANZA:
+• "alta": todos los dígitos se ven con claridad, lectura definitiva sin ambigüedad
+• "baja": 2 o más dígitos son inciertos, o el display es parcialmente ilegible
+
+CALIDAD DE FOTO:
+• "buena": display visible, dígitos legibles
+• "aceptable": mayoría legibles, algo de reflejo o leve desenfoque
+• "mala": display ilegible, muy oscuro, fuera de encuadre
+• "es_medidor": false SOLO si la imagen NO contiene ningún medidor de gas
+
+Responde ÚNICAMENTE con este JSON (sin texto adicional antes o después):
 {
   "es_medidor": true,
-  "lectura": "00201.2",
-  "confianza": "alta|baja",
-  "calidad_foto": "buena|aceptable|mala",
-  "motivo_calidad": "solo si aceptable o mala, sino omitir",
-  "nota": "una sola oración explicando qué viste"
-}
-
-Reglas:
-- "es_medidor": false solo si la imagen claramente NO es un medidor de gas
-- "lectura": null ÚNICAMENTE si el display es totalmente ilegible
-- "confianza" alta = puedes leer la mayoría de dígitos y extraes una lectura razonable; baja = imposible leer
-- En caso de duda sobre confianza, usa "alta"`,
-
-  agua: `Eres un experto en lectura de medidores de agua domiciliario en Colombia (marca Socorrés y similares).
-
-TAREA: Extrae la lectura del medidor de agua en esta imagen.
-
-CÓMO IDENTIFICAR EL DISPLAY:
-- Busca la ventanilla ovalada o rectangular en el frente del medidor (generalmente azul)
-- Contiene tambores giratorios con dígitos del 0 al 9 (como odómetro de carro)
-- REGLA DE COLOR: los primeros 5 dígitos son SIEMPRE negros (metros cúbicos m³). Los últimos 1 o 2 dígitos son rojos (decimales)
-- Si un dígito parece entre negro y rojo por reflejo o ángulo, trátalo como NEGRO
-- Ignora: número de serie grabado en el metal (ej: "22016683"), stickers, códigos de barras
-
-EJEMPLO: cinco tambores negros "01348" y dos rojos "42" → lectura "01348.42"
-
-${CALIDAD_INSTRUCCION}
-
-Responde SOLO con este JSON (sin texto adicional):
-{
-  "es_medidor": true,
+  "digitos_vistos": "describe brevemente cada posición: ej '0,1,3,4,8 negros · 4,2 rojos'",
   "lectura": "01348.42",
-  "confianza": "alta|baja",
-  "calidad_foto": "buena|aceptable|mala",
-  "motivo_calidad": "solo si aceptable o mala, sino omitir",
-  "nota": "una sola oración explicando qué viste en la ventanilla (no el número de serie)"
-}
+  "confianza": "alta",
+  "calidad_foto": "buena",
+  "motivo_calidad": "omitir si es buena",
+  "nota": "una oración describiendo qué viste en el display (no en el cuerpo del medidor)"
+}`,
 
-Reglas:
-- "es_medidor": false solo si la imagen claramente NO es un medidor de agua
-- "lectura": null ÚNICAMENTE si la ventanilla es totalmente ilegible
-- "confianza" alta = puedes leer la mayoría de dígitos y extraes una lectura razonable; baja = imposible leer
-- En caso de duda sobre confianza, usa "alta"`,
+  agua: `Eres un experto en lectura de medidores de agua domiciliario en Colombia.
+
+TAREA: Extraer la lectura del contador de agua con máxima precisión.
+
+Sigue estos pasos antes de dar tu respuesta:
+
+PASO 1 — LOCALIZA EL DISPLAY:
+Busca la ventanilla ovalada o rectangular en el frente del medidor (generalmente carcasa azul o negra).
+Contiene tambores giratorios con dígitos 0–9.
+IGNORA: número de serie grabado en el metal (ej: "22016683"), stickers, marcas de la empresa.
+
+PASO 2 — ANALIZA CADA DÍGITO de izquierda a derecha dentro de la ventanilla:
+• ¿Qué número ves en esa posición? (0–9)
+• Si el tambor está entre dos números, usa SIEMPRE el inferior
+• ¿Es negro o rojo? (si hay reflejo que hace dudar sobre el color, trátalo como negro)
+
+PASO 3 — SEPARA:
+• Los primeros 5 dígitos negros = metros cúbicos (parte entera)
+• Los últimos 1 o 2 dígitos rojos = decimales
+
+PASO 4 — VERIFICA:
+¿La lectura tiene sentido? (rango típico 0–99999 m³)
+¿Estás leyendo la ventanilla de los tambores, NO el número de serie del cuerpo?
+
+CONFIANZA:
+• "alta": todos los dígitos se ven con claridad, lectura definitiva
+• "baja": 2 o más dígitos son inciertos
+
+CALIDAD DE FOTO:
+• "buena": display visible, dígitos legibles
+• "aceptable": mayoría legibles, algo de reflejo o leve desenfoque
+• "mala": display ilegible, muy oscuro, fuera de encuadre
+• "es_medidor": false SOLO si la imagen NO contiene ningún medidor de agua
+
+Responde ÚNICAMENTE con este JSON (sin texto adicional):
+{
+  "es_medidor": true,
+  "digitos_vistos": "ej '0,1,3,4,8 negros · 4,2 rojos'",
+  "lectura": "01348.42",
+  "confianza": "alta",
+  "calidad_foto": "buena",
+  "motivo_calidad": "omitir si es buena",
+  "nota": "una oración: qué viste exactamente en la ventanilla (no el número de serie)"
+}`,
 
   luz: `Eres un experto en lectura de medidores de energía eléctrica domiciliario en Colombia.
 
-TAREA: Extrae la lectura del medidor de luz en esta imagen.
+TAREA: Extraer la lectura del medidor de luz con máxima precisión.
 
-CÓMO IDENTIFICAR EL DISPLAY:
-- Puede ser un display LCD digital (números en pantalla electrónica)
-- O tambores giratorios mecánicos con dígitos del 0 al 9
-- La unidad es kWh
-- Los dígitos en ROJO o después de la coma son decimales
-- Ignora: número de serie, códigos de barras, stickers de la empresa, texto de marca
+Sigue estos pasos antes de dar tu respuesta:
 
-EJEMPLO LCD: pantalla muestra "004521" → lectura "004521"
-EJEMPLO mecánico: "0045" negro y "21" rojo → lectura "0045.21"
+PASO 1 — IDENTIFICA EL TIPO DE DISPLAY:
+• Tambores mecánicos giratorios (como odómetro) → cada rueda muestra un dígito
+• LCD digital → pantalla electrónica con segmentos
 
-${CALIDAD_INSTRUCCION}
+PASO 2 — ANALIZA CADA DÍGITO de izquierda a derecha:
+• Tambores: si el dígito está entre dos números, usa el INFERIOR
+• LCD: lee cada segmento con cuidado (el 1 puede confundirse con 7, el 6 con 8)
+• ¿Es negro/blanco o rojo? Los rojos o separados por coma son decimales
 
-Responde SOLO con este JSON (sin texto adicional):
+PASO 3 — SEPARA:
+• Dígitos principales = kWh
+• Dígitos rojos o después del separador = decimales
+• Ignora: número de serie, stickers de la empresa, texto de marca
+
+PASO 4 — VERIFICA:
+¿La lectura es coherente para un medidor doméstico? (rango típico 0–99999 kWh)
+
+CONFIANZA:
+• "alta": todos los dígitos claros, lectura definitiva
+• "baja": 2 o más dígitos inciertos
+
+CALIDAD DE FOTO:
+• "buena": display visible, dígitos legibles
+• "aceptable": mayoría legibles, leve reflejo o desenfoque
+• "mala": display ilegible
+• "es_medidor": false SOLO si la imagen claramente NO es un medidor eléctrico
+
+Responde ÚNICAMENTE con este JSON:
 {
   "es_medidor": true,
+  "tipo_display": "tambores_mecanicos | lcd_digital",
+  "digitos_vistos": "ej '0,0,4,5,2,1 blancos'",
   "lectura": "004521",
-  "confianza": "alta|baja",
-  "calidad_foto": "buena|aceptable|mala",
-  "motivo_calidad": "solo si aceptable o mala, sino omitir",
-  "nota": "una sola oración explicando qué viste"
-}
-
-Reglas:
-- "es_medidor": false solo si la imagen claramente NO es un medidor de luz/energía
-- "lectura": null ÚNICAMENTE si el display es totalmente ilegible
-- "confianza" alta = puedes leer la mayoría de dígitos y extraes una lectura razonable; baja = imposible leer
-- En caso de duda sobre confianza, usa "alta"`,
+  "confianza": "alta",
+  "calidad_foto": "buena",
+  "motivo_calidad": "omitir si es buena",
+  "nota": "una oración describiendo qué viste en el display"
+}`,
 };
 
-/**
- * Analiza la foto de un medidor y extrae la lectura numérica + calidad de foto.
- * @param {string} imagePath  Ruta absoluta a la imagen
- * @param {string} tipo       'luz' | 'agua' | 'gas'
- * @returns {{ lectura, confianza, calidad_foto, motivo_calidad, requiere_revision, nota }}
- */
-async function analizarMedidor(imagePath, tipo) {
+// ─────────────────────────────────────────────────────────────
+// PROMPTS — Segunda pasada (perspectiva diferente, sin sesgo)
+// ─────────────────────────────────────────────────────────────
+const PROMPTS_VERIFICACION = {
+
+  gas: `Analiza esta imagen de un medidor de gas domiciliario.
+
+Tu única tarea: leer los dígitos dentro de la ventanilla con tambores giratorios del medidor.
+NO leas el número de serie grabado en el cuerpo metálico.
+
+Método:
+1. Cuenta cuántas posiciones tiene la ventanilla
+2. Lee cada posición de derecha a izquierda (empieza por los rojos/decimales)
+3. Si un tambor está entre dos dígitos, toma el inferior
+4. Junta todo de izquierda a derecha para dar la lectura
+
+Responde ÚNICAMENTE con JSON:
+{
+  "lectura": "XXXXX.XX o null si ilegible",
+  "confianza": "alta | baja",
+  "digitos_individuales": "lista de lo que viste en cada posición",
+  "nota": "qué viste exactamente"
+}`,
+
+  agua: `Analiza esta imagen de un medidor de agua domiciliario.
+
+Tu única tarea: leer los dígitos dentro de la ventanilla ovalada/rectangular del medidor.
+El número de serie grabado en el metal del cuerpo NO es la lectura — ignóralo completamente.
+
+Método:
+1. Localiza la ventanilla con los tambores (carcasa generalmente azul)
+2. Lee cada posición de derecha a izquierda (empieza por los rojos/decimales)
+3. Si un tambor está entre dos dígitos, toma el inferior
+4. Junta todo de izquierda a derecha
+
+Responde ÚNICAMENTE con JSON:
+{
+  "lectura": "XXXXX.XX o null si ilegible",
+  "confianza": "alta | baja",
+  "digitos_individuales": "lista de lo que viste en cada posición",
+  "nota": "qué viste exactamente en la ventanilla"
+}`,
+
+  luz: `Analiza esta imagen de un medidor de energía eléctrica domiciliario.
+
+Tu única tarea: leer los dígitos del display del medidor (tambores o LCD).
+Ignora número de serie, stickers y texto de marca.
+
+Método:
+1. Identifica el tipo de display (mecánico o digital)
+2. Lee cada dígito individualmente de derecha a izquierda
+3. Si es mecánico y un tambor está entre dos dígitos, toma el inferior
+4. Junta todo de izquierda a derecha
+
+Responde ÚNICAMENTE con JSON:
+{
+  "lectura": "XXXXXX o null si ilegible",
+  "confianza": "alta | baja",
+  "digitos_individuales": "lista de lo que viste",
+  "nota": "qué viste exactamente"
+}`,
+};
+
+// ─────────────────────────────────────────────────────────────
+// Función principal
+// ─────────────────────────────────────────────────────────────
+async function analizarMedidor(imagePath, tipo, { modo = 'rapido' } = {}) {
   const imageBuffer = fs.readFileSync(imagePath);
   if (imageBuffer.length === 0) {
-    logger.error(`OCR error para ${imagePath}: archivo vacío (0 bytes)`);
+    logger.error(`OCR error para ${imagePath}: archivo vacío`);
     return {
-      lectura: null, confianza: 'baja', calidad_foto: 'mala',
-      motivo_calidad: 'Imagen vacía — retoma la foto', requiere_revision: true,
-      nota: 'El archivo de imagen está vacío',
+      es_medidor: true, lectura: null, confianza: 'baja',
+      calidad_foto: 'mala', motivo_calidad: 'Imagen vacía — retoma la foto',
+      requiere_revision: true, nota: 'El archivo de imagen está vacío',
     };
   }
-  const base64 = imageBuffer.toString('base64');
-  const ext = path.extname(imagePath).toLowerCase().replace('.', '');
-  const mediaType = ext === 'jpg' ? 'image/jpeg' : `image/${ext}`;
-  const prompt = PROMPTS[tipo] || PROMPTS.luz;
+
+  // Preprocessing
+  let processedPath = null;
+  let workingBuffer = imageBuffer;
+  try {
+    processedPath = await preprocessImage(imagePath);
+    workingBuffer = fs.readFileSync(processedPath);
+  } catch (prepErr) {
+    logger.warn(`OCR preprocessing falló, usando imagen original: ${prepErr.message}`);
+  }
+
+  const ext       = path.extname(imagePath).toLowerCase().replace('.', '');
+  const mediaType = (ext === 'jpg' || ext === 'jpeg') ? 'image/jpeg' : `image/${ext}`;
+  const prompt    = PROMPTS_COT[tipo] || PROMPTS_COT.luz;
 
   try {
-    const response = await client.chat.completions.create({
-      model: OPENAI_MODEL,
-      max_completion_tokens: 512,
-      messages: [
-        {
-          role: 'user',
-          content: [
-            {
-              type: 'image_url',
-              image_url: { url: `data:${mediaType};base64,${base64}`, detail: 'high' },
-            },
-            { type: 'text', text: prompt },
-          ],
-        },
-      ],
-    });
+    // ── Primera llamada ──────────────────────────────────────
+    const json1   = await llamarModelo(workingBuffer, mediaType, prompt);
+    const result1 = parsearResultado(json1);
 
-    const text = response.choices[0].message.content.trim();
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) throw new Error('Respuesta sin JSON válido');
-    const json = JSON.parse(jsonMatch[0]);
+    // ── Segunda llamada (solo modo preciso y si hay incertidumbre) ──
+    if (modo === 'preciso' && (result1.confianza === 'baja' || result1.calidad_foto !== 'buena')) {
+      try {
+        const prompt2  = PROMPTS_VERIFICACION[tipo] || PROMPTS_VERIFICACION.luz;
+        const json2    = await llamarModelo(workingBuffer, mediaType, prompt2);
+        const result2  = parsearResultado(json2);
 
-    const calidad = json.calidad_foto || 'buena';
+        if (result1.lectura && result2.lectura) {
+          if (result1.lectura === result2.lectura) {
+            // Consenso → confirmar con alta confianza
+            return {
+              ...result1,
+              confianza:         'alta',
+              requiere_revision: result1.calidad_foto === 'mala' || !result1.es_medidor,
+              nota:              `[Verificado] ${result1.nota}`,
+            };
+          } else {
+            // Discrepancia entre pasadas → flag con ambas lecturas para admin
+            return {
+              ...result1,
+              confianza:         'baja',
+              requiere_revision: true,
+              nota:              `[IA inconsistente] Pasada 1: ${result1.lectura} · Pasada 2: ${result2.lectura}. Requiere verificación manual.`,
+            };
+          }
+        }
 
-    const esMedidor = json.es_medidor !== false;
-    return {
-      es_medidor:        esMedidor,
-      lectura:           json.lectura   ?? null,
-      confianza:         json.confianza ?? 'baja',
-      calidad_foto:      calidad,
-      motivo_calidad:    json.motivo_calidad || null,
-      requiere_revision: json.lectura === null || calidad === 'mala',
-      nota:              json.nota ?? '',
-    };
+        // Si la segunda logró leer y la primera no → usar segunda
+        if (!result1.lectura && result2.lectura) {
+          return {
+            ...result2,
+            nota: `[Recuperado en 2ª pasada] ${result2.nota}`,
+          };
+        }
+      } catch (err2) {
+        logger.warn(`OCR segunda pasada falló: ${err2.message}`);
+      }
+    }
+
+    return result1;
+
   } catch (err) {
     logger.error(`OCR error para ${imagePath}: ${err.message}`);
     return {
-      es_medidor:        true,
-      lectura:           null,
-      confianza:         'baja',
-      calidad_foto:      'mala',
-      motivo_calidad:    'Error al procesar la imagen con IA',
-      requiere_revision: true,
-      nota:              'Error al procesar la imagen con IA',
+      es_medidor: true, lectura: null, confianza: 'baja',
+      calidad_foto: 'mala', motivo_calidad: 'Error al procesar la imagen con IA',
+      requiere_revision: true, nota: 'Error al procesar la imagen con IA',
     };
+  } finally {
+    if (processedPath) {
+      try { fs.unlinkSync(processedPath); } catch {}
+    }
   }
 }
 

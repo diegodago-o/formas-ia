@@ -48,7 +48,8 @@ router.post(
     if (!['luz', 'agua', 'gas'].includes(tipo)) return res.status(400).json({ error: 'tipo inválido' });
 
     const absolutePath = path.join(__dirname, '../../', process.env.UPLOADS_DIR || 'uploads', req.file.filename);
-    const result = await analizarMedidor(absolutePath, tipo);
+    const modoOcr = req.body.modo === 'preciso' ? 'preciso' : 'rapido';
+    const result = await analizarMedidor(absolutePath, tipo, { modo: modoOcr });
     res.json({ ...result, foto_path: req.file.filename });
   })
 );

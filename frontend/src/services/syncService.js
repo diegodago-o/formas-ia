@@ -74,6 +74,7 @@ export async function syncPendingVisits(onProgress) {
                 formData.append('foto', m.foto_file, `${tipo}_${Date.now()}.jpg`);
               }
               formData.append('tipo', tipo);
+              formData.append('modo', 'preciso'); // doble verificación en sync offline
 
               const { data: ocrResult } = await api.post('/visits/ocr-preview', formData, {
                 headers: { 'Content-Type': 'multipart/form-data' },
