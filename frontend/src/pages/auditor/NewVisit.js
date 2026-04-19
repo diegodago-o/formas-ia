@@ -177,12 +177,14 @@ export default function NewVisit() {
         const restored = {};
         for (const tipo of ['luz', 'agua', 'gas']) {
           const m = draft.medidores[tipo] || { ...EMPTY_MEDIDOR };
-          // Prioridad: URL del servidor (online) > blob desde foto_file (offline)
+          // Prioridad: URL del servidor > blob desde foto_file > base64
           let preview = null;
           if (m.foto_path) {
             preview = `/uploads/${m.foto_path}`;
           } else if (m.foto_file) {
             preview = URL.createObjectURL(m.foto_file);
+          } else if (m.foto_base64) {
+            preview = m.foto_base64; // data URL funciona directamente como src
           }
           restored[tipo] = { ...m, preview };
         }
@@ -206,10 +208,10 @@ export default function NewVisit() {
     clearTimeout(autoSaveTimer.current);
     autoSaveTimer.current = setTimeout(async () => {
       try {
-        // Quitar preview (blob URL no sobrevive entre sesiones)
+        // Quitar preview y foto_file (no sobreviven IDB); foto_base64 sí persiste
         const medidoresForSave = {};
         for (const tipo of ['luz', 'agua', 'gas']) {
-          medidoresForSave[tipo] = { ...medidores[tipo], preview: null };
+          medidoresForSave[tipo] = { ...medidores[tipo], preview: null, foto_file: null };
         }
 
         // Intentar obtener nombres desde arrays cargados, fallback al catálogo global
@@ -288,8 +290,18 @@ export default function NewVisit() {
     setMedidores(prev => ({ ...prev, [tipo]: { ...prev[tipo], [field]: value } }));
   };
 
-  const handleMedidorFile = (tipo, file) => {
-    setMedidores(prev => ({ ...prev, [tipo]: { ...prev[tipo], foto_file: file } }));
+  const handleMedidorFile = async (tipo, file) => {
+    // Convertir a base64 de inmediato para que sobreviva el IDB entre sesiones
+    let base64 = null;
+    try {
+      base64 = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload  = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+    } catch { /* base64 queda null, se usará foto_file como fallback */ }
+    setMedidores(prev => ({ ...prev, [tipo]: { ...prev[tipo], foto_file: file, foto_base64: base64 } }));
   };
 
   const canNext = () => {
@@ -322,7 +334,7 @@ export default function NewVisit() {
         try {
           const medidoresForSave = {};
           for (const tipo of ['luz', 'agua', 'gas']) {
-            medidoresForSave[tipo] = { ...medidores[tipo], preview: null };
+            medidoresForSave[tipo] = { ...medidores[tipo], preview: null, foto_file: null };
           }
           const id = await saveDraft({
             ciudadId, conjuntoId, torreId, apartamento,
@@ -349,7 +361,7 @@ export default function NewVisit() {
     if (currentDraftId) {
       const medidoresForSave = {};
       for (const tipo of ['luz', 'agua', 'gas']) {
-        medidoresForSave[tipo] = { ...medidores[tipo], preview: null };
+        medidoresForSave[tipo] = { ...medidores[tipo], preview: null, foto_file: null };
       }
       // Await para que IDB termine de escribir antes de navegar
       await updateDraft(currentDraftId, {
@@ -369,10 +381,11 @@ export default function NewVisit() {
 
     const medidoresPayload = ['luz', 'agua', 'gas'].reduce((acc, tipo) => {
       const m = medidores[tipo];
-      if (m.foto_path || m.lectura || m.sin_acceso || m.foto_file) {
+      if (m.foto_path || m.lectura || m.sin_acceso || m.foto_file || m.foto_base64) {
         acc[tipo] = {
           foto_path:         m.foto_path         || null,
           foto_file:         m.foto_file         || null,
+          foto_base64:       m.foto_base64       || null,
           lectura:           m.lectura           || null,
           sin_acceso:        m.sin_acceso        || false,
           motivo_sin_acceso: m.motivo_sin_acceso || null,
@@ -389,6 +402,27 @@ export default function NewVisit() {
 
     if (online) {
       try {
+        // Subir fotos offline pendientes (foto_file o foto_base64 sin foto_path)
+        for (const tipo of ['luz', 'agua', 'gas']) {
+          const m = medidoresPayload[tipo];
+          if (!m || m.foto_path || (!m.foto_file && !m.foto_base64)) continue;
+          try {
+            const formData = new FormData();
+            if (m.foto_base64) {
+              const blob = await fetch(m.foto_base64).then(r => r.blob());
+              formData.append('foto', blob, `${tipo}_${Date.now()}.jpg`);
+            } else {
+              formData.append('foto', m.foto_file, `${tipo}_${Date.now()}.jpg`);
+            }
+            const { data: uploaded } = await api.post('/visits/upload-photo', formData, {
+              headers: { 'Content-Type': 'multipart/form-data' },
+            });
+            m.foto_path = uploaded.foto_path;
+          } catch (uploadErr) {
+            console.warn(`No se pudo subir foto offline de ${tipo}:`, uploadErr.message);
+          }
+        }
+
         await api.post('/visits', {
           latitud, longitud,
           ciudad_id:   ciudadId,
@@ -455,7 +489,7 @@ export default function NewVisit() {
                       || allTorres.find(t => String(t.id) === String(torreId))?.nombre || '';
 
   const meterDoneCount = ['luz', 'agua', 'gas'].filter(
-    t => medidores[t].lectura || medidores[t].sin_acceso || medidores[t].foto_path
+    t => medidores[t].lectura || medidores[t].sin_acceso || medidores[t].foto_path || medidores[t].foto_base64
   ).length;
 
   // ── Pantalla éxito offline ─────────────────────────────────────────
@@ -674,7 +708,7 @@ export default function NewVisit() {
             <p><strong>GPS:</strong> {latitud ? `${latitud}, ${longitud}${gpsMode === 'last_known' ? ' (última conocida)' : ''}` : '⚠️ Sin GPS'}</p>
             <p><strong>Medidores:</strong> {
               ['luz','agua','gas']
-                .filter(t => medidores[t].foto_path || medidores[t].lectura || medidores[t].sin_acceso || medidores[t].foto_file)
+                .filter(t => medidores[t].foto_path || medidores[t].foto_base64 || medidores[t].foto_file || medidores[t].lectura || medidores[t].sin_acceso)
                 .map(t => medidores[t].sin_acceso ? `${t} (sin acceso)` : t)
                 .join(', ') || 'Ninguno registrado'
             }</p>
