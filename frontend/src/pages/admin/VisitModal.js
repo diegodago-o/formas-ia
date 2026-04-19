@@ -133,6 +133,17 @@ export default function VisitModal({ visitId, onClose, onUpdated }) {
                       m.lectura_ocr !== m.lectura_confirmada;
                     const sinEvidencia = m && (m.sin_acceso == 1 || m.sin_acceso === true);
 
+                    // Determinar texto del hallazgo OCR para mostrar en el banner
+                    const hallazgo = m?.requiere_revision ? (() => {
+                      if (sinEvidencia)          return { icon: '🚫', msg: 'Sin evidencia — auditor no pudo acceder' };
+                      if (m.es_medidor === 0)    return { icon: '🚫', msg: 'La IA detectó que la foto no es un medidor' };
+                      if (hayDiscrepancia)       return { icon: '⚠️', msg: `Discrepancia: IA detectó ${m.lectura_ocr} pero el auditor registró ${m.lectura_confirmada}` };
+                      if (!m.lectura_confirmada) return { icon: '📸', msg: 'La IA no pudo leer el número del medidor' };
+                      if (deltaAnomalo)          return { icon: '📉', msg: delta < 0 ? 'Lectura inferior a la visita anterior' : 'Sin variación respecto a la visita anterior' };
+                      if (m.calidad_foto === 'mala') return { icon: '📷', msg: 'Foto de mala calidad' };
+                      return { icon: '⚠️', msg: 'Requiere revisión' };
+                    })() : null;
+
                     return (
                       <div key={tipo} className={`${styles.medCard} ${m?.requiere_revision ? styles.medCardAlerta : ''}`}>
                         {/* Cabecera */}
@@ -151,6 +162,14 @@ export default function VisitModal({ visitId, onClose, onUpdated }) {
                             )}
                           </div>
                         </div>
+
+                        {/* Banner hallazgo OCR */}
+                        {hallazgo && (
+                          <div className={styles.hallazgoOcr}>
+                            <span>{hallazgo.icon}</span>
+                            <span>{hallazgo.msg}</span>
+                          </div>
+                        )}
 
                         {/* Sin medidor registrado */}
                         {!m ? (

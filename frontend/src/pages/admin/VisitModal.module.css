@@ -211,6 +211,20 @@
 
 .actions { display: flex; gap: 12px; flex-wrap: wrap; }
 
+/* Banner hallazgo OCR dentro del medCard */
+.hallazgoOcr {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #FFFBEB;
+  border-top: 1px solid #FCD34D;
+  border-bottom: 1px solid #FCD34D;
+  padding: 8px 14px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #92400E;
+}
+
 .alertasBloqueo {
   background: #FFFBEB;
   border: 1.5px solid #F59E0B;
