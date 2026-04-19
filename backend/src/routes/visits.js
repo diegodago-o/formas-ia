@@ -137,12 +137,13 @@ router.post('/', authMiddleware, ah(async (req, res) => {
       }
 
       // ── Determinar requiere_revision ──
-      const flagCalidad = (calidad_foto === 'mala');
-      const flagLectura = !lectura && !sin_acceso;             // sin lectura y no es sin_acceso
-      const flagDelta   = delta !== null && delta <= 0;        // negativo o igual
-      const flagAcceso  = !!sin_acceso;
+      const flagCalidad      = (calidad_foto === 'mala');
+      const flagLectura      = !lectura && !sin_acceso;
+      const flagDelta        = delta !== null && delta <= 0;
+      const flagAcceso       = !!sin_acceso;
+      const flagDiscrepancia = !!(lectura_ocr && lectura && lectura_ocr !== lectura);
 
-      const requiereRevision = flagCalidad || flagLectura || flagDelta || flagAcceso ? 1 : 0;
+      const requiereRevision = flagCalidad || flagLectura || flagDelta || flagAcceso || flagDiscrepancia ? 1 : 0;
 
       await conn.query(
         `INSERT INTO medidores
