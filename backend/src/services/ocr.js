@@ -19,9 +19,9 @@ async function preprocessImage(inputPath) {
   await sharp(inputPath)
     .rotate()                                              // auto-rotar por EXIF
     .resize(2048, 2048, { fit: 'inside', withoutEnlargement: true })
-    .sharpen({ sigma: 1.2 })                              // nitidez
-    .normalise({ lower: 1, upper: 99 })                  // estirar contraste
-    .jpeg({ quality: 92 })
+    .sharpen({ sigma: 1.0 })                              // nitidez suave
+    .modulate({ saturation: 1.4, brightness: 1.05 })     // realza colores (rojo vs negro más distinguibles)
+    .jpeg({ quality: 93 })
     .toFile(tmpPath);
   return tmpPath;
 }
@@ -33,7 +33,8 @@ async function llamarModelo(imageBuffer, mediaType, prompt) {
   const base64 = imageBuffer.toString('base64');
   const response = await client.chat.completions.create({
     model: OPENAI_MODEL,
-    max_completion_tokens: 700,
+    max_completion_tokens: 500,
+    temperature: 0,          // máxima determinismo — misma imagen, misma respuesta
     messages: [{
       role: 'user',
       content: [
@@ -110,12 +111,11 @@ CALIDAD DE FOTO:
 Responde ÚNICAMENTE con este JSON (sin texto adicional antes o después):
 {
   "es_medidor": true,
-  "digitos_vistos": "describe brevemente cada posición: ej '0,1,3,4,8 negros · 4,2 rojos'",
   "lectura": "01348.42",
   "confianza": "alta",
   "calidad_foto": "buena",
   "motivo_calidad": "omitir si es buena",
-  "nota": "una oración describiendo qué viste en el display (no en el cuerpo del medidor)"
+  "nota": "dígitos vistos de izquierda a derecha: 0,1,3,4,8 negros · 4,2 rojos"
 }`,
 
   agua: `Eres un experto en lectura de medidores de agua domiciliario en Colombia.
@@ -155,12 +155,11 @@ CALIDAD DE FOTO:
 Responde ÚNICAMENTE con este JSON (sin texto adicional):
 {
   "es_medidor": true,
-  "digitos_vistos": "ej '0,1,3,4,8 negros · 4,2 rojos'",
   "lectura": "01348.42",
   "confianza": "alta",
   "calidad_foto": "buena",
   "motivo_calidad": "omitir si es buena",
-  "nota": "una oración: qué viste exactamente en la ventanilla (no el número de serie)"
+  "nota": "dígitos vistos de izquierda a derecha: 0,1,3,4,8 negros · 4,2 rojos"
 }`,
 
   luz: `Eres un experto en lectura de medidores de energía eléctrica domiciliario en Colombia.
@@ -199,13 +198,11 @@ CALIDAD DE FOTO:
 Responde ÚNICAMENTE con este JSON:
 {
   "es_medidor": true,
-  "tipo_display": "tambores_mecanicos | lcd_digital",
-  "digitos_vistos": "ej '0,0,4,5,2,1 blancos'",
   "lectura": "004521",
   "confianza": "alta",
   "calidad_foto": "buena",
   "motivo_calidad": "omitir si es buena",
-  "nota": "una oración describiendo qué viste en el display"
+  "nota": "tipo display y dígitos vistos: ej 'LCD · 0,0,4,5,2,1'"
 }`,
 };
 
