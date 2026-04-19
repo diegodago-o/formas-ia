@@ -13,7 +13,8 @@ Evalúa si la foto es válida como evidencia contractual:
 - "buena": medidor claramente visible, display bien iluminado y enfocado
 - "aceptable": display legible aunque con algo de sombra, leve reflejo o ángulo
 - "mala": foto borrosa, muy oscura, display fuera de encuadre, o simplemente no se puede ver el medidor
-Incluye motivo_calidad solo si es "aceptable" o "mala" (ej: "foto muy oscura", "display con reflejo fuerte").`;
+Incluye motivo_calidad solo si es "aceptable" o "mala" (ej: "foto muy oscura", "display con reflejo fuerte").
+- "es_medidor": false ÚNICAMENTE si la imagen claramente NO contiene ningún medidor de servicios (ej: muestra un mueble, control remoto, persona, pared vacía, etc.). Si hay aunque sea un medidor parcialmente visible, usa true.`;
 
 const PROMPTS = {
   gas: `Eres un experto en lectura de medidores de gas domiciliario en Colombia.
@@ -33,6 +34,7 @@ ${CALIDAD_INSTRUCCION}
 
 Responde SOLO con este JSON (sin texto adicional):
 {
+  "es_medidor": true,
   "lectura": "00201.2",
   "confianza": "alta|baja",
   "calidad_foto": "buena|aceptable|mala",
@@ -41,6 +43,7 @@ Responde SOLO con este JSON (sin texto adicional):
 }
 
 Reglas:
+- "es_medidor": false solo si la imagen claramente NO es un medidor de gas
 - "lectura": null ÚNICAMENTE si el display es totalmente ilegible
 - "confianza" alta = puedes leer la mayoría de dígitos y extraes una lectura razonable; baja = imposible leer
 - En caso de duda sobre confianza, usa "alta"`,
@@ -62,6 +65,7 @@ ${CALIDAD_INSTRUCCION}
 
 Responde SOLO con este JSON (sin texto adicional):
 {
+  "es_medidor": true,
   "lectura": "01348.42",
   "confianza": "alta|baja",
   "calidad_foto": "buena|aceptable|mala",
@@ -70,6 +74,7 @@ Responde SOLO con este JSON (sin texto adicional):
 }
 
 Reglas:
+- "es_medidor": false solo si la imagen claramente NO es un medidor de agua
 - "lectura": null ÚNICAMENTE si la ventanilla es totalmente ilegible
 - "confianza" alta = puedes leer la mayoría de dígitos y extraes una lectura razonable; baja = imposible leer
 - En caso de duda sobre confianza, usa "alta"`,
@@ -92,6 +97,7 @@ ${CALIDAD_INSTRUCCION}
 
 Responde SOLO con este JSON (sin texto adicional):
 {
+  "es_medidor": true,
   "lectura": "004521",
   "confianza": "alta|baja",
   "calidad_foto": "buena|aceptable|mala",
@@ -100,6 +106,7 @@ Responde SOLO con este JSON (sin texto adicional):
 }
 
 Reglas:
+- "es_medidor": false solo si la imagen claramente NO es un medidor de luz/energía
 - "lectura": null ÚNICAMENTE si el display es totalmente ilegible
 - "confianza" alta = puedes leer la mayoría de dígitos y extraes una lectura razonable; baja = imposible leer
 - En caso de duda sobre confianza, usa "alta"`,
@@ -151,7 +158,9 @@ async function analizarMedidor(imagePath, tipo) {
 
     const calidad = json.calidad_foto || 'buena';
 
+    const esMedidor = json.es_medidor !== false;
     return {
+      es_medidor:        esMedidor,
       lectura:           json.lectura   ?? null,
       confianza:         json.confianza ?? 'baja',
       calidad_foto:      calidad,
@@ -162,6 +171,7 @@ async function analizarMedidor(imagePath, tipo) {
   } catch (err) {
     logger.error(`OCR error para ${imagePath}: ${err.message}`);
     return {
+      es_medidor:        true,
       lectura:           null,
       confianza:         'baja',
       calidad_foto:      'mala',

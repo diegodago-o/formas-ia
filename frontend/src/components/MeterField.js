@@ -25,9 +25,9 @@ export default function MeterField({ tipo, data, onChange, onFile, isOnline = tr
   const [ocrLoading, setOcrLoading]       = useState(false);
   const [ocrResult, setOcrResult]         = useState(null);
   const [editando, setEditando]           = useState(false);
-  const [sinAcceso, setSinAcceso]         = useState(false);
-  const [motivoAcceso, setMotivoAcceso]   = useState('');
-  const [fotoMala, setFotoMala]           = useState(false);  // alerta calidad mala
+  const [sinAcceso, setSinAcceso]         = useState(() => data.sin_acceso ? true : false);
+  const [motivoAcceso, setMotivoAcceso]   = useState(() => data.motivo_sin_acceso || '');
+  const [fotoMala, setFotoMala]           = useState(false);
 
   const handleFile = async e => {
     const file = e.target.files[0];
@@ -76,6 +76,7 @@ export default function MeterField({ tipo, data, onChange, onFile, isOnline = tr
         motivo_calidad: result.motivo_calidad,
         nota_ocr:       result.nota,
         requiere_revision: result.requiere_revision,
+        es_medidor:     result.es_medidor,
       });
 
       if (result.calidad_foto === 'mala') setFotoMala(true);
@@ -214,27 +215,31 @@ export default function MeterField({ tipo, data, onChange, onFile, isOnline = tr
       {!ocrLoading && fotoMala && ocrResult && (
         <div className={styles.fotoMalaBox}>
           <div className={styles.fotoMalaHeader}>
-            <span>📷 Foto no válida</span>
+            <span>{ocrResult.es_medidor === false ? '🚫 No es un medidor' : '📷 Foto no válida'}</span>
             {ocrResult.motivo_calidad && (
               <span className={styles.fotoMalaMotivo}>{ocrResult.motivo_calidad}</span>
             )}
           </div>
           <p className={styles.fotoMalaTexto}>
-            La foto no cumple los requisitos contractuales. Por favor retoma con mejor iluminación y encuadre.
+            {ocrResult.es_medidor === false
+              ? 'La imagen no contiene un medidor. Debes fotografiar el medidor correspondiente.'
+              : 'La foto no cumple los requisitos contractuales. Por favor retoma con mejor iluminación y encuadre.'}
           </p>
           <div className={styles.fotoMalaAcciones}>
             <button className={styles.btnRetomar} onClick={remove}>
               📷 Retomar foto
             </button>
-            <button
-              className={styles.btnContinuarMala}
-              onClick={() => {
-                setFotoMala(false);
-                if (!ocrResult.lectura) setEditando(true);
-              }}
-            >
-              Continuar igual
-            </button>
+            {ocrResult.es_medidor !== false && (
+              <button
+                className={styles.btnContinuarMala}
+                onClick={() => {
+                  setFotoMala(false);
+                  if (!ocrResult.lectura) setEditando(true);
+                }}
+              >
+                Continuar igual
+              </button>
+            )}
           </div>
         </div>
       )}
