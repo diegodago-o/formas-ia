@@ -300,8 +300,8 @@ export default function MeterField({ tipo, data, onChange, onFile, isOnline = tr
         </div>
       )}
 
-      {/* Resultado OCR: IA detectó */}
-      {!ocrLoading && !fotoMala && ocrResult && ocrResult.lectura && !editando && (
+      {/* Resultado: IA detectó (online) o lectura manual confirmada (offline) */}
+      {!ocrLoading && !fotoMala && ocrResult && (ocrResult.lectura || data.lectura) && !editando && (
         <div className={styles.resultOk}>
           {ocrResult.calidad_foto === 'aceptable' && (
             <div className={styles.calidadAceptable}>
@@ -310,11 +310,13 @@ export default function MeterField({ tipo, data, onChange, onFile, isOnline = tr
           )}
           <div className={styles.resultRow}>
             <div className={styles.resultValor}>
-              <span className={styles.resultLabel}>IA detectó</span>
+              <span className={styles.resultLabel}>
+                {ocrResult.lectura ? 'IA detectó' : 'Lectura registrada'}
+              </span>
               <span className={styles.resultNum}>{data.lectura || ocrResult.lectura}</span>
             </div>
             <button className={styles.btnCorregir} onClick={() => setEditando(true)}>
-              ✏️ Está mal
+              ✏️ Corregir
             </button>
           </div>
         </div>
@@ -326,7 +328,9 @@ export default function MeterField({ tipo, data, onChange, onFile, isOnline = tr
           <label className={styles.editLabel}>
             {ocrResult.lectura
               ? `IA leyó "${ocrResult.lectura}" — ingresa el valor correcto:`
-              : 'IA no pudo leer — ingresa la lectura:'}
+              : data.lectura
+                ? `Lectura actual: "${data.lectura}" — puedes corregirla:`
+                : 'Sin conexión — ingresa la lectura manualmente:'}
           </label>
           <div className={styles.inputRow}>
             <input
