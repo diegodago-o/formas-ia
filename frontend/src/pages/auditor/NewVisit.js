@@ -286,8 +286,13 @@ export default function NewVisit() {
     setMedidores(prev => ({ ...prev, [tipo]: { ...prev[tipo], foto_file: file } }));
   };
 
+  const medidorInvalido = step === 1 && ['luz', 'agua', 'gas'].some(
+    tipo => medidores[tipo].ocr_meta?.es_medidor === false && !medidores[tipo].sin_acceso
+  );
+
   const canNext = () => {
     if (step === 0) return ciudadId && conjuntoId && apartamento.trim();
+    if (step === 1) return !medidorInvalido;
     return true;
   };
 
@@ -674,6 +679,12 @@ export default function NewVisit() {
       )}
 
       {error && <div className={styles.error}>{error}</div>}
+
+      {medidorInvalido && (
+        <div className={styles.error}>
+          ⚠️ Retoma la foto del medidor o márcalo como "Sin evidencia" para continuar.
+        </div>
+      )}
 
       {/* Botón guardar progreso (aparece cuando hay borrador activo, paso 1 o 2) */}
       {currentDraftId && step >= 1 && (
