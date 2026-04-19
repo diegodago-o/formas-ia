@@ -9,30 +9,23 @@ const TIPO_META = {
   gas:  { label: 'Gas',  emoji: '🔥' },
 };
 
-// Determina el tipo de alerta para bifurcar el flujo
 function tipoAlerta(a) {
-  if (a.sin_acceso)       return 'sin_acceso';     // Auditor no pudo acceder al medidor
-  if (a.es_medidor === 0) return 'no_es_medidor';  // La IA detectó que la foto no es un medidor
-  if (!a.lectura_ocr)     return 'sin_deteccion';  // OCR no encontró ningún número
+  if (a.sin_acceso)       return 'sin_acceso';
+  if (a.es_medidor === 0) return 'no_es_medidor';
+  if (!a.lectura_ocr)     return 'sin_deteccion';
   if (a.lectura_ocr && a.lectura_confirmada && a.lectura_ocr !== a.lectura_confirmada)
-                          return 'discrepancia';   // Auditor corrigió la lectura de la IA
-  return 'baja_confianza';                         // OCR lo leyó pero con baja confianza
+                          return 'discrepancia';
+  return 'baja_confianza';
 }
 
 export default function AdminAlerts() {
-  const [alerts, setAlerts]       = useState([]);
-  const [loading, setLoading]     = useState(true);
+  const [alerts, setAlerts]           = useState([]);
+  const [loading, setLoading]         = useState(true);
   const [viewVisitId, setViewVisitId] = useState(null);
-  const [lightbox, setLightbox]   = useState(null); // src de la foto ampliada
-
-  // Estado para "ingresar lectura manual"
-  const [editing, setEditing]   = useState(null); // medidor_id
-  const [newVal, setNewVal]     = useState('');
-  const [saving, setSaving]     = useState(false);
-
-  // Estado para "rechazar visita"
-  const [rejecting, setRejecting] = useState(null); // { visita_id, tipo, medidor_id }
-  const [rejectMotivo, setRejectMotivo] = useState('');
+  const [lightbox, setLightbox]       = useState(null);
+  const [editing, setEditing]         = useState(null); // medidor_id en edición
+  const [newVal, setNewVal]           = useState('');
+  const [saving, setSaving]           = useState(false);
 
   const load = () => {
     setLoading(true);
@@ -43,33 +36,28 @@ export default function AdminAlerts() {
 
   useEffect(() => { load(); }, []);
 
-  // Confirmar lectura manual
-  const confirmLectura = async (id) => {
-    if (!newVal.trim()) return;
+  // Resolver un hallazgo a nivel de medidor
+  const resolver = async (id, estado_revision_ocr, lectura_confirmada = null) => {
     setSaving(true);
     try {
-      await api.patch(`/admin/medidores/${id}`, { lectura_confirmada: newVal.trim() });
-      setEditing(null);
-      setNewVal('');
+      await api.patch(`/admin/medidores/${id}`, { estado_revision_ocr, lectura_confirmada });
       load();
     } finally {
       setSaving(false);
     }
   };
 
-  // Rechazar la visita completa (foto no corresponde al medidor)
-  const rechazarVisita = async () => {
-    if (!rejecting) return;
+  // Guardar lectura corregida manualmente
+  const confirmarLectura = async (id) => {
+    if (!newVal.trim()) return;
     setSaving(true);
-    const motivo = rejectMotivo.trim() ||
-      `Foto incorrecta en medidor de ${TIPO_META[rejecting.tipo]?.label || rejecting.tipo}. La foto no muestra el medidor. Se requiere nueva visita.`;
     try {
-      await api.patch(`/admin/visits/${rejecting.visita_id}/estado`, {
-        estado: 'rechazada',
-        motivo_rechazo: motivo,
+      await api.patch(`/admin/medidores/${id}`, {
+        estado_revision_ocr: 'corregido',
+        lectura_confirmada: newVal.trim(),
       });
-      setRejecting(null);
-      setRejectMotivo('');
+      setEditing(null);
+      setNewVal('');
       load();
     } finally {
       setSaving(false);
@@ -93,14 +81,13 @@ export default function AdminAlerts() {
 
       <div className={styles.list}>
         {alerts.map(a => {
-          const meta          = TIPO_META[a.tipo];
-          const tipo          = tipoAlerta(a);
-          const sinDet        = tipo === 'sin_deteccion';
-          const sinAcceso     = tipo === 'sin_acceso';
-          const noEsMedidor   = tipo === 'no_es_medidor';
-          const discrepancia  = tipo === 'discrepancia';
+          const meta        = TIPO_META[a.tipo];
+          const tipo        = tipoAlerta(a);
+          const sinDet      = tipo === 'sin_deteccion';
+          const sinAcceso   = tipo === 'sin_acceso';
+          const noEsMedidor = tipo === 'no_es_medidor';
+          const discrepancia = tipo === 'discrepancia';
           const isEditing   = editing === a.medidor_id;
-          const isRejecting = rejecting?.medidor_id === a.medidor_id;
 
           return (
             <div
@@ -124,7 +111,7 @@ export default function AdminAlerts() {
                 }
               </div>
 
-              {/* Info ubicación + visita */}
+              {/* Info ubicación */}
               <div className={styles.info}>
                 <span>🆔 Visita #{a.visita_id}</span>
                 <span>📍 {a.ciudad} · {a.conjunto}{a.torre ? ` · Torre ${a.torre}` : ''} · Apto {a.apartamento}</span>
@@ -145,76 +132,61 @@ export default function AdminAlerts() {
                 />
               )}
 
-              {/* ── Caso A: Sin acceso al medidor ── */}
+              {/* ── Sin acceso ── */}
               {sinAcceso && (
                 <div className={styles.sinAccesoBox}>
-                  <div className={styles.sinDeteccionTitle}>
-                    🚫 El auditor no pudo acceder a este medidor
-                  </div>
+                  <div className={styles.sinDeteccionTitle}>🚫 El auditor no pudo acceder a este medidor</div>
                   {a.motivo_sin_acceso && (
                     <div className={styles.sinDeteccionNota}>💬 {a.motivo_sin_acceso}</div>
                   )}
                   <div className={styles.sinDeteccionDesc}>
-                    Puedes aprobar la visita si el motivo es válido, o rechazarla para que el auditor vuelva a intentarlo.
+                    Aprueba si el motivo es válido, o rechaza esta lectura para que el auditor vuelva a intentarlo.
                   </div>
                 </div>
               )}
 
-              {/* ── Caso: Foto no es un medidor ── */}
+              {/* ── No es medidor ── */}
               {noEsMedidor && (
                 <div className={styles.sinDeteccionBox}>
-                  <div className={styles.sinDeteccionTitle}>
-                    🚫 La IA detectó que esta foto no corresponde a un medidor
-                  </div>
+                  <div className={styles.sinDeteccionTitle}>🚫 La IA detectó que esta foto no corresponde a un medidor</div>
                   {a.nota_ocr && (
                     <div className={styles.sinDeteccionNota}>💬 {a.nota_ocr}</div>
                   )}
                   <div className={styles.sinDeteccionDesc}>
                     El auditor registró la visita offline sin poder verificar la foto con IA.
-                    Puedes aprobar si el contexto lo justifica, o rechazar para que el auditor
-                    vuelva a registrar este medidor correctamente.
+                    Aprueba si el contexto lo justifica, o rechaza esta lectura para que se vuelva a registrar.
                   </div>
                 </div>
               )}
 
-              {/* ── Caso: Sin detección (medidor borroso / ilegible) ── */}
+              {/* ── Sin detección ── */}
               {sinDet && (
                 <div className={styles.sinDeteccionBox}>
-                  <div className={styles.sinDeteccionTitle}>
-                    ⚠️ La IA no pudo leer el número del medidor
-                  </div>
+                  <div className={styles.sinDeteccionTitle}>⚠️ La IA no pudo leer el número del medidor</div>
                   {a.nota_ocr && (
                     <div className={styles.sinDeteccionNota}>💬 {a.nota_ocr}</div>
                   )}
                   <div className={styles.sinDeteccionDesc}>
-                    El medidor es visible pero el display no pudo ser leído. Puedes ingresar
-                    la lectura si la conoces, o rechazar la visita para que el auditor retome la foto.
+                    Ingresa la lectura correcta revisando la foto, o rechaza esta lectura para que el auditor retome la foto.
                   </div>
                 </div>
               )}
 
-              {/* ── Caso B: Lectura con baja confianza / discrepancia ── */}
+              {/* ── Discrepancia / baja confianza ── */}
               {!sinDet && !sinAcceso && !noEsMedidor && (
                 <div className={styles.readings}>
-                  {a.lectura_ocr && a.lectura_confirmada && a.lectura_ocr !== a.lectura_confirmada && (
+                  {discrepancia && (
                     <div className={styles.discrepanciaAlert}>
                       ⚠️ <strong>Discrepancia:</strong> el auditor registró un valor diferente al detectado por la IA.
                       Verifica la foto para confirmar cuál es el valor correcto.
                     </div>
                   )}
-                  <div>
-                    <strong>IA detectó:</strong>{' '}
-                    <code>{a.lectura_ocr ?? '–'}</code>
-                  </div>
+                  <div><strong>IA detectó:</strong> <code>{a.lectura_ocr ?? '–'}</code></div>
                   <div>
                     <strong>Auditor registró:</strong>{' '}
-                    <code className={a.lectura_ocr && a.lectura_confirmada && a.lectura_ocr !== a.lectura_confirmada ? styles.discrepanciaVal : ''}>
-                      {a.lectura_confirmada ?? '–'}
-                    </code>
+                    <code className={discrepancia ? styles.discrepanciaVal : ''}>{a.lectura_confirmada ?? '–'}</code>
                   </div>
-                  {a.nota_ocr && (
-                    <div className={styles.nota}>💬 {a.nota_ocr}</div>
-                  )}
+                  {a.nota_ocr && <div className={styles.nota}>💬 {a.nota_ocr}</div>}
                   {a.calidad_foto && a.calidad_foto !== 'buena' && (
                     <div className={`${styles.nota} ${a.calidad_foto === 'mala' ? styles.notaMala : ''}`}>
                       📷 Calidad de foto: <strong>{a.calidad_foto}</strong>
@@ -224,9 +196,7 @@ export default function AdminAlerts() {
                 </div>
               )}
 
-              {/* ── Acciones ── */}
-
-              {/* Formulario: ingresar lectura manual */}
+              {/* Formulario: ingresar / corregir lectura */}
               {isEditing && (
                 <div className={styles.editRow}>
                   <input
@@ -239,10 +209,10 @@ export default function AdminAlerts() {
                   />
                   <button
                     className={styles.saveBtn}
-                    onClick={() => confirmLectura(a.medidor_id)}
+                    onClick={() => confirmarLectura(a.medidor_id)}
                     disabled={!newVal.trim() || saving}
                   >
-                    {saving ? '...' : '✓ Confirmar'}
+                    {saving ? '...' : '✓ Guardar'}
                   </button>
                   <button
                     className={styles.cancelBtn}
@@ -253,126 +223,91 @@ export default function AdminAlerts() {
                 </div>
               )}
 
-              {/* Formulario: rechazar visita */}
-              {isRejecting && (
-                <div className={styles.rejectBox}>
-                  <p className={styles.rejectTitle}>
-                    ↩ Rechazar visita — el auditor deberá registrar este apartamento de nuevo
-                  </p>
-                  <textarea
-                    className={styles.rejectTextarea}
-                    rows={3}
-                    value={rejectMotivo}
-                    onChange={e => setRejectMotivo(e.target.value)}
-                    placeholder={`Motivo (opcional). Por defecto: "Foto incorrecta en medidor de ${meta.label}. La foto no muestra el medidor. Se requiere nueva visita."`}
-                  />
-                  <div className={styles.rejectBtns}>
-                    <button
-                      className={styles.rejectConfirmBtn}
-                      onClick={rechazarVisita}
-                      disabled={saving}
-                    >
-                      {saving ? 'Rechazando...' : '↩ Confirmar rechazo'}
-                    </button>
-                    <button
-                      className={styles.cancelBtn}
-                      onClick={() => { setRejecting(null); setRejectMotivo(''); }}
-                    >
-                      Cancelar
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* Botones iniciales (sin formulario abierto) */}
-              {!isEditing && !isRejecting && (
+              {/* ── Botones de acción ── */}
+              {!isEditing && (
                 <div className={styles.actionRow}>
-                  {(sinAcceso || noEsMedidor) ? (
-                    /* Sin acceso / No es medidor: solo aprobar o rechazar */
+                  {/* Sin acceso / No es medidor */}
+                  {(sinAcceso || noEsMedidor) && (
                     <>
                       <button
                         className={styles.btnAprobar}
-                        onClick={async () => {
-                          await api.patch(`/admin/visits/${a.visita_id}/estado`, { estado: 'aprobada', motivo_rechazo: null });
-                          load();
-                        }}
+                        onClick={() => resolver(a.medidor_id, 'aprobado')}
+                        disabled={saving}
                       >
-                        ✓ Aprobar visita
+                        ✓ Aprobar lectura
                       </button>
                       <button
                         className={styles.btnRechazar}
-                        onClick={() => setRejecting({
-                          visita_id:  a.visita_id,
-                          tipo:       a.tipo,
-                          medidor_id: a.medidor_id,
-                        })}
+                        onClick={() => resolver(a.medidor_id, 'rechazado')}
+                        disabled={saving}
                       >
-                        ↩ Rechazar visita
+                        ✕ Rechazar lectura
                       </button>
                     </>
-                  ) : sinDet ? (
-                    /* Medidor ilegible: ingresar lectura o rechazar */
+                  )}
+
+                  {/* Sin detección */}
+                  {sinDet && (
                     <>
                       <button
                         className={styles.btnManual}
                         onClick={() => { setEditing(a.medidor_id); setNewVal(''); }}
                       >
-                        📝 Ingresar lectura manualmente
+                        📝 Ingresar lectura
                       </button>
                       <button
                         className={styles.btnRechazar}
-                        onClick={() => setRejecting({
-                          visita_id:  a.visita_id,
-                          tipo:       a.tipo,
-                          medidor_id: a.medidor_id,
-                        })}
+                        onClick={() => resolver(a.medidor_id, 'rechazado')}
+                        disabled={saving}
                       >
-                        ↩ Rechazar visita
+                        ✕ Rechazar lectura
                       </button>
                     </>
-                  ) : discrepancia ? (
-                    /* Discrepancia: confirmar valor del auditor, corregir, o rechazar */
+                  )}
+
+                  {/* Discrepancia */}
+                  {discrepancia && (
                     <>
                       <button
                         className={styles.btnAprobarLectura}
-                        onClick={async () => {
-                          await api.patch(`/admin/medidores/${a.medidor_id}`, { lectura_confirmada: a.lectura_confirmada });
-                          load();
-                        }}
+                        onClick={() => resolver(a.medidor_id, 'aprobado', a.lectura_confirmada)}
+                        disabled={saving}
                       >
                         ✓ Confirmar valor del auditor ({a.lectura_confirmada})
                       </button>
                       <button
                         className={styles.reviewBtn}
-                        onClick={() => {
-                          setEditing(a.medidor_id);
-                          setNewVal(a.lectura_confirmada || a.lectura_ocr || '');
-                        }}
+                        onClick={() => { setEditing(a.medidor_id); setNewVal(a.lectura_confirmada || a.lectura_ocr || ''); }}
                       >
-                        ✏️ Corregir lectura
+                        ✏️ Corregir
                       </button>
                       <button
                         className={styles.btnRechazar}
-                        onClick={() => setRejecting({
-                          visita_id:  a.visita_id,
-                          tipo:       a.tipo,
-                          medidor_id: a.medidor_id,
-                        })}
+                        onClick={() => resolver(a.medidor_id, 'rechazado')}
+                        disabled={saving}
                       >
-                        ↩ Rechazar visita
+                        ✕ Rechazar lectura
                       </button>
                     </>
-                  ) : (
-                    /* Baja confianza: corregir o confirmar */
-                    <button
-                      className={styles.reviewBtn}
-                      onClick={() => {
-                        setEditing(a.medidor_id);
-                        setNewVal(a.lectura_confirmada || a.lectura_ocr || '');
-                      }}
-                    >
-                      ✏️ Revisar y confirmar lectura
-                    </button>
+                  )}
+
+                  {/* Baja confianza */}
+                  {!sinDet && !sinAcceso && !noEsMedidor && !discrepancia && (
+                    <>
+                      <button
+                        className={styles.btnAprobar}
+                        onClick={() => resolver(a.medidor_id, 'aprobado', a.lectura_confirmada)}
+                        disabled={saving}
+                      >
+                        ✓ Confirmar lectura
+                      </button>
+                      <button
+                        className={styles.reviewBtn}
+                        onClick={() => { setEditing(a.medidor_id); setNewVal(a.lectura_confirmada || a.lectura_ocr || ''); }}
+                      >
+                        ✏️ Corregir lectura
+                      </button>
+                    </>
                   )}
                 </div>
               )}
@@ -389,7 +324,6 @@ export default function AdminAlerts() {
         />
       )}
 
-      {/* Lightbox */}
       {lightbox && (
         <div className={styles.lightboxOverlay} onClick={() => setLightbox(null)}>
           <img src={lightbox} alt="Foto ampliada" className={styles.lightboxImg} />

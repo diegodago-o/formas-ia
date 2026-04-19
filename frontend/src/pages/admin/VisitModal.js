@@ -133,19 +133,29 @@ export default function VisitModal({ visitId, onClose, onUpdated }) {
                       m.lectura_ocr !== m.lectura_confirmada;
                     const sinEvidencia = m && (m.sin_acceso == 1 || m.sin_acceso === true);
 
-                    // Determinar texto del hallazgo OCR para mostrar en el banner
+                    // Banner: hallazgo pendiente o tag de resolución
+                    const estadoRevision = m?.estado_revision_ocr;
                     const hallazgo = m?.requiere_revision ? (() => {
-                      if (sinEvidencia)          return { icon: '🚫', msg: 'Sin evidencia — auditor no pudo acceder' };
-                      if (m.es_medidor === 0)    return { icon: '🚫', msg: 'La IA detectó que la foto no es un medidor' };
-                      if (hayDiscrepancia)       return { icon: '⚠️', msg: `Discrepancia: IA detectó ${m.lectura_ocr} pero el auditor registró ${m.lectura_confirmada}` };
-                      if (!m.lectura_confirmada) return { icon: '📸', msg: 'La IA no pudo leer el número del medidor' };
-                      if (deltaAnomalo)          return { icon: '📉', msg: delta < 0 ? 'Lectura inferior a la visita anterior' : 'Sin variación respecto a la visita anterior' };
+                      if (sinEvidencia)             return { icon: '🚫', msg: 'Sin evidencia — auditor no pudo acceder' };
+                      if (m.es_medidor === 0)       return { icon: '🚫', msg: 'La IA detectó que la foto no es un medidor' };
+                      if (hayDiscrepancia)          return { icon: '⚠️', msg: `Discrepancia: IA detectó ${m.lectura_ocr} pero el auditor registró ${m.lectura_confirmada}` };
+                      if (!m.lectura_confirmada)    return { icon: '📸', msg: 'La IA no pudo leer el número del medidor' };
+                      if (deltaAnomalo)             return { icon: '📉', msg: delta < 0 ? 'Lectura inferior a la visita anterior' : 'Sin variación respecto a la visita anterior' };
                       if (m.calidad_foto === 'mala') return { icon: '📷', msg: 'Foto de mala calidad' };
                       return { icon: '⚠️', msg: 'Requiere revisión' };
                     })() : null;
+                    const revisionTag = !m?.requiere_revision && estadoRevision && estadoRevision !== 'pendiente'
+                      ? estadoRevision : null;
+
+                    const cardExtra = m?.requiere_revision
+                      ? styles.medCardAlerta
+                      : estadoRevision === 'rechazado' ? styles.medCardRechazado
+                      : estadoRevision === 'aprobado'  ? styles.medCardAprobado
+                      : estadoRevision === 'corregido' ? styles.medCardCorregido
+                      : '';
 
                     return (
-                      <div key={tipo} className={`${styles.medCard} ${m?.requiere_revision ? styles.medCardAlerta : ''}`}>
+                      <div key={tipo} className={`${styles.medCard} ${cardExtra}`}>
                         {/* Cabecera */}
                         <div className={styles.medHeader} style={{ borderColor: meta?.color }}>
                           <span>{meta?.emoji} {meta?.label}</span>
@@ -163,11 +173,19 @@ export default function VisitModal({ visitId, onClose, onUpdated }) {
                           </div>
                         </div>
 
-                        {/* Banner hallazgo OCR */}
+                        {/* Banner: hallazgo pendiente */}
                         {hallazgo && (
                           <div className={styles.hallazgoOcr}>
                             <span>{hallazgo.icon}</span>
                             <span>{hallazgo.msg}</span>
+                          </div>
+                        )}
+                        {/* Tag: resolución del admin */}
+                        {revisionTag && (
+                          <div className={`${styles.revisionTag} ${styles[`revision_${revisionTag}`]}`}>
+                            {revisionTag === 'aprobado'  && '✓ Lectura aprobada'}
+                            {revisionTag === 'rechazado' && '✕ Lectura rechazada'}
+                            {revisionTag === 'corregido' && '✏️ Lectura corregida por administrador'}
                           </div>
                         )}
 

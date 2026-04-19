@@ -211,6 +211,11 @@
 
 .actions { display: flex; gap: 12px; flex-wrap: wrap; }
 
+/* Variantes de borde según resolución admin */
+.medCardRechazado { border-color: #FCA5A5; box-shadow: 0 0 0 2px #FEE2E2; }
+.medCardAprobado  { border-color: #6EE7B7; box-shadow: 0 0 0 2px #D1FAE5; }
+.medCardCorregido { border-color: #93C5FD; box-shadow: 0 0 0 2px #DBEAFE; }
+
 /* Banner hallazgo OCR dentro del medCard */
 .hallazgoOcr {
   display: flex;
@@ -224,6 +229,21 @@
   font-weight: 600;
   color: #92400E;
 }
+
+/* Tag de resolución OCR por medidor */
+.revisionTag {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  border-top: 1px solid;
+  border-bottom: 1px solid;
+}
+.revision_aprobado  { background: #D1FAE5; color: #065F46; border-color: #6EE7B7; }
+.revision_rechazado { background: #FEE2E2; color: #991B1B; border-color: #FCA5A5; }
+.revision_corregido { background: #EFF6FF; color: #1D4ED8; border-color: #93C5FD; }
 
 .alertasBloqueo {
   background: #FFFBEB;

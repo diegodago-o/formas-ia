@@ -114,22 +114,27 @@ router.patch('/visits/:id/estado', ...isAdmin, ah(async (req, res) => {
   res.json({ ok: true });
 }));
 
-// PATCH /api/admin/medidores/:id  — corregir lectura de un medidor
+// PATCH /api/admin/medidores/:id  — resolver hallazgo OCR de un medidor
 router.patch('/medidores/:id', ...isAdmin, ah(async (req, res) => {
-  const { lectura_confirmada, marcar_revisado } = req.body;
+  const { lectura_confirmada, estado_revision_ocr } = req.body;
 
-  if (!lectura_confirmada && !marcar_revisado) {
-    return res.status(400).json({ error: 'Debes proporcionar lectura_confirmada o marcar_revisado' });
+  const estadosValidos = ['aprobado', 'rechazado', 'corregido'];
+  if (!lectura_confirmada && !estado_revision_ocr) {
+    return res.status(400).json({ error: 'Debes proporcionar lectura_confirmada o estado_revision_ocr' });
+  }
+  if (estado_revision_ocr && !estadosValidos.includes(estado_revision_ocr)) {
+    return res.status(400).json({ error: 'estado_revision_ocr inválido' });
   }
 
   await pool.query(
     `UPDATE medidores
-     SET lectura_confirmada = ?,
-         requiere_revision  = 0,
-         revisado_por       = ?,
-         revisado_en        = NOW()
+     SET lectura_confirmada  = COALESCE(?, lectura_confirmada),
+         estado_revision_ocr = COALESCE(?, estado_revision_ocr),
+         requiere_revision   = 0,
+         revisado_por        = ?,
+         revisado_en         = NOW()
      WHERE id = ?`,
-    [lectura_confirmada || null, req.user.id, req.params.id]
+    [lectura_confirmada || null, estado_revision_ocr || null, req.user.id, req.params.id]
   );
   res.json({ ok: true });
 }));
@@ -142,6 +147,7 @@ router.get('/alerts', ...isAdmin, ah(async (req, res) => {
             m.lectura_manual, m.lectura_confirmada,
             m.calidad_foto, m.motivo_calidad,
             m.sin_acceso, m.motivo_sin_acceso, m.es_medidor,
+            m.estado_revision_ocr,
             v.id AS visita_id, v.fecha, v.apartamento,
             ci.nombre AS ciudad, c.nombre AS conjunto, t.nombre AS torre,
             u.nombre AS auditor
