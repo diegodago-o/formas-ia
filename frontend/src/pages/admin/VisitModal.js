@@ -265,7 +265,9 @@ export default function VisitModal({ visitId, onClose, onUpdated }) {
 
                 {!canEdit && (
                   <div className={`${styles.estadoFinal} ${styles[visit.estado]}`}>
-                    {visit.estado === 'aprobada' ? '✓ Visita aprobada' : '✕ Visita rechazada'}
+                    {visit.estado === 'aprobada'  ? '✓ Visita aprobada'
+                     : visit.estado === 'anulada' ? '🚫 Visita anulada'
+                     : '✕ Visita rechazada'}
                   </div>
                 )}
               </div>
