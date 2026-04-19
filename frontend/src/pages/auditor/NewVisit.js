@@ -681,12 +681,11 @@ export default function NewVisit() {
             <span className={styles.meterCount}>{meterDoneCount}/3</span>
           </div>
 
-          {online
-            ? <p className={styles.hint}>Toma la foto de cada medidor e ingresa la lectura.</p>
-            : <p className={`${styles.hint} ${styles.hintOffline}`}>
-                📵 Sin conexión — ingresa las lecturas manualmente. Las fotos se sincronizarán al recuperar señal.
-              </p>
-          }
+          {!online && (
+            <p className={`${styles.hint} ${styles.hintOffline}`}>
+              📵 Sin conexión — las fotos y lecturas se guardarán localmente y se enviarán al recuperar señal.
+            </p>
+          )}
 
           {['luz', 'agua', 'gas'].map(tipo => (
             <MeterField

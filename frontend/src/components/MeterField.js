@@ -1,5 +1,4 @@
 import React, { useRef, useState } from 'react';
-import api from '../services/api';
 import { compressImage } from '../services/compressImage';
 import styles from './MeterField.module.css';
 
@@ -23,7 +22,6 @@ export default function MeterField({ tipo, data, onChange, onFile, isOnline = tr
   const inputRef = useRef();
   const meta     = META[tipo];
 
-  const [uploading,      setUploading]      = useState(false);
   const [imgLoading,     setImgLoading]     = useState(() => !!data.preview);
   const [imgError,       setImgError]       = useState(false);
   const [sinAcceso,      setSinAcceso]      = useState(() => data.sin_acceso ? true : false);
@@ -49,26 +47,9 @@ export default function MeterField({ tipo, data, onChange, onFile, isOnline = tr
     let fileToUpload = file;
     try { fileToUpload = await compressImage(file); } catch { /* usar original */ }
 
+    // Siempre guardar local — se sube al servidor solo al presionar "Guardar visita"
+    onChange('foto', fileToUpload);
     onFile?.(fileToUpload);
-
-    if (!isOnline) {
-      onChange('foto', fileToUpload);
-      return;
-    }
-
-    setUploading(true);
-    try {
-      const formData = new FormData();
-      formData.append('foto', fileToUpload);
-      const { data: result } = await api.post('/visits/upload-photo', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
-      onChange('foto_path', result.foto_path);
-    } catch {
-      onChange('foto', fileToUpload);
-    } finally {
-      setUploading(false);
-    }
   };
 
   const remove = () => {
@@ -204,16 +185,8 @@ export default function MeterField({ tipo, data, onChange, onFile, isOnline = tr
         </div>
       )}
 
-      {/* Subiendo foto */}
-      {uploading && (
-        <div className={styles.ocrLoading}>
-          <span className={styles.spinner} />
-          Subiendo foto...
-        </div>
-      )}
-
       {/* Lectura confirmada → vista verde con botón Editar */}
-      {data.preview && !uploading && lecturaSaved && data.lectura && (
+      {data.preview && lecturaSaved && data.lectura && (
         <div className={styles.resultOk}>
           <div className={styles.resultRow}>
             <div className={styles.resultValor}>
@@ -231,7 +204,7 @@ export default function MeterField({ tipo, data, onChange, onFile, isOnline = tr
       )}
 
       {/* Lectura: input + botón Guardar */}
-      {data.preview && !uploading && !lecturaSaved && (
+      {data.preview && !lecturaSaved && (
         <div className={styles.editBox}>
           <label className={styles.editLabel}>Ingresa la lectura del medidor:</label>
           <div className={styles.inputRow}>
