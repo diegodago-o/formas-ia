@@ -60,7 +60,7 @@ export default function VisitModal({ visitId, onClose, onUpdated }) {
     }
   };
 
-  const canEdit = !visit || !['aprobada', 'rechazada'].includes(visit.estado);
+  const canEdit = !visit || !['aprobada', 'rechazada', 'anulada'].includes(visit.estado);
 
   return (
     <>
