@@ -6,6 +6,33 @@ const ah = require('../middleware/asyncHandler');
 
 const isAdmin = [authMiddleware, requireRole('admin')];
 
+// GET /api/admin/stats  — métricas para el dashboard
+router.get('/stats', ...isAdmin, ah(async (req, res) => {
+  const [[estados]] = await pool.query(
+    `SELECT
+       COUNT(*)                                          AS total,
+       SUM(estado = 'pendiente')                        AS pendiente,
+       SUM(estado = 'aprobada')                         AS aprobada,
+       SUM(estado = 'rechazada')                        AS rechazada,
+       SUM(estado = 'anulada')                          AS anulada,
+       SUM(EXISTS (
+         SELECT 1 FROM medidores m
+         WHERE m.visita_id = v.id AND m.requiere_revision = 1
+       ) AND estado NOT IN ('rechazada','anulada','aprobada')) AS alertas_pendientes,
+       SUM(estado IN ('aprobada','rechazada'))           AS revisadas
+     FROM visitas v`
+  );
+
+  const [porCiudad] = await pool.query(
+    `SELECT ci.nombre AS ciudad, COUNT(*) AS total
+     FROM visitas v JOIN ciudades ci ON ci.id = v.ciudad_id
+     GROUP BY v.ciudad_id, ci.nombre
+     ORDER BY total DESC`
+  );
+
+  res.json({ ...estados, por_ciudad: porCiudad });
+}));
+
 // GET /api/admin/visits  — todas las visitas con filtros
 router.get('/visits', ...isAdmin, ah(async (req, res) => {
   const { ciudad_id, conjunto_id, auditor_id, desde, hasta, requiere_revision, estado, page = 1, limit = 20 } = req.query;

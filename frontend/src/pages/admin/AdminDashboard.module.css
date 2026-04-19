@@ -1,39 +1,96 @@
-.heading { font-size: 1.2rem; font-weight: 700; margin-bottom: 20px; }
+.root { display: flex; flex-direction: column; gap: 16px; }
 
-.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 28px; }
+.sectionTitle {
+  font-size: 0.8rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.6px; color: var(--text-muted); margin-top: 4px;
+}
 
-.card {
-  background: var(--card-color, var(--primary));
-  color: #fff;
+/* ── Fila top: 3 métricas principales ─────────────────── */
+.topRow { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+
+.metricCard {
   border-radius: var(--radius);
-  padding: 20px;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 6px;
+  padding: 20px 16px;
+  display: flex; flex-direction: column; align-items: flex-start; gap: 6px;
   box-shadow: var(--shadow);
-  transition: opacity 0.2s, transform 0.15s;
+  color: #fff;
+  transition: opacity 0.15s, transform 0.12s;
   text-align: left;
 }
-.card:hover  { opacity: 0.92; }
-.card:active { transform: scale(0.97); }
+.metricCard:hover  { opacity: 0.92; }
+.metricCard:active { transform: scale(0.97); }
 
-.cardIcon  { font-size: 1.6rem; }
-.cardValue { font-size: 2rem; font-weight: 800; line-height: 1; }
-.cardLabel { font-size: 0.8rem; opacity: 0.85; }
+.metricIcon  { font-size: 1.5rem; }
+.metricValue { font-size: 2.2rem; font-weight: 800; line-height: 1; }
+.metricLabel { font-size: 0.78rem; opacity: 0.88; }
 
-.quickLinks h3 { font-size: 0.9rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px; }
+.total              { background: #1E3A5F; }
+.alertasPendientes  { background: #F59E0B; }
+.revisadas          { background: #10B981; }
 
-.links { display: flex; flex-direction: column; gap: 10px; }
-.links button {
-  background: var(--surface);
-  color: var(--text);
-  border-radius: var(--radius-sm);
-  padding: 14px 16px;
-  font-size: 0.92rem;
-  font-weight: 500;
-  text-align: left;
+/* ── Estados ──────────────────────────────────────────── */
+.estadosRow { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+
+.estadoCard {
+  border-radius: var(--radius);
+  background: var(--estado-bg, #F3F4F6);
+  padding: 16px 12px;
+  display: flex; flex-direction: column; align-items: flex-start; gap: 4px;
   box-shadow: var(--shadow);
-  transition: background 0.15s;
+  border-left: 4px solid var(--estado-color, #6B7280);
+  transition: transform 0.12s, box-shadow 0.12s;
+  text-align: left;
+}
+.estadoCard:hover  { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+.estadoCard:active { transform: scale(0.97); }
+
+.estadoIcon  { font-size: 1.2rem; }
+.estadoValue { font-size: 1.8rem; font-weight: 800; color: var(--estado-color); line-height: 1; }
+.estadoLabel { font-size: 0.76rem; color: var(--text-muted); font-weight: 600; }
+
+/* ── Por ciudad ────────────────────────────────────────── */
+.ciudadesTable {
+  background: var(--surface);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+.tableLoading, .tableEmpty {
+  padding: 20px; text-align: center;
+  font-size: 0.88rem; color: var(--text-muted);
+}
+
+.ciudadRow {
+  display: grid;
+  grid-template-columns: 160px 1fr 48px 44px;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.ciudadRow:last-child { border-bottom: none; }
+
+.ciudadNombre { font-size: 0.88rem; font-weight: 600; color: var(--text); }
+.ciudadBar    { height: 8px; background: #E5E7EB; border-radius: 4px; overflow: hidden; }
+.ciudadBarFill { height: 100%; background: #1E3A5F; border-radius: 4px; transition: width 0.4s; }
+.ciudadTotal  { font-size: 0.88rem; font-weight: 700; color: var(--text); text-align: right; }
+.ciudadPct    { font-size: 0.78rem; color: var(--text-muted); text-align: right; }
+
+/* ── Accesos rápidos ────────────────────────────────────── */
+.links { display: flex; flex-direction: column; gap: 8px; }
+.links button {
+  background: var(--surface); color: var(--text);
+  border-radius: var(--radius-sm); padding: 13px 16px;
+  font-size: 0.9rem; font-weight: 500; text-align: left;
+  box-shadow: var(--shadow); transition: background 0.15s;
 }
 .links button:hover { background: #EFF6FF; }
+
+/* ── Responsive ─────────────────────────────────────────── */
+@media (max-width: 500px) {
+  .topRow    { grid-template-columns: 1fr 1fr; }
+  .topRow .metricCard:last-child { grid-column: span 2; }
+  .estadosRow { grid-template-columns: 1fr 1fr; }
+  .ciudadRow  { grid-template-columns: 1fr auto auto; }
+  .ciudadBar  { display: none; }
+}
