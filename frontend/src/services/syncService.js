@@ -2,16 +2,14 @@
  * syncService.js
  * Sube al servidor las visitas guardadas localmente mientras no había conexión.
  *
- * Soporta visitas mixtas (fotos tomadas online + offline en la misma visita):
- *
  * CASO A — foto_path existe: foto ya subida al servidor en sesión online.
- *   → Reutilizar directamente. NO re-subir (el archivo ya existe en uploads/).
- *   → Los metadatos OCR ya están en el objeto (vienen del ocr_meta spread).
+ *   → Reutilizar directamente.
  *
  * CASO B — sin foto_path pero con foto_base64 / foto_file: foto tomada offline.
- *   → Subir ahora, correr OCR y obtener foto_path nuevo.
+ *   → Subir ahora vía /visits/upload-photo, obtener foto_path.
+ *   → El OCR correrá en background en el servidor tras guardar la visita.
  *
- * CASO C — sin foto_path ni archivo local: entrada manual o sin_acceso.
+ * CASO C — sin foto ni archivo local: entrada manual o sin_acceso.
  *   → Guardar lectura/sin_acceso sin foto.
  */
 
@@ -33,7 +31,6 @@ export async function syncPendingVisits(onProgress) {
         await updatePendingVisit(visit.localId, { status: 'syncing' });
         onProgress?.({ type: 'start', localId: visit.localId });
 
-        // ── Paso 1: resolver cada medidor según su origen ──────────────
         const medidoresResueltos = {};
 
         for (const tipo of ['luz', 'agua', 'gas']) {
@@ -42,27 +39,20 @@ export async function syncPendingVisits(onProgress) {
 
           // ── CASO A: foto ya subida en sesión online ────────────────────
           if (m.foto_path) {
-            // El archivo ya existe en el servidor — reutilizar path y metadatos OCR
             medidoresResueltos[tipo] = {
               foto_path:         m.foto_path,
               lectura:           m.lectura           || null,
-              lectura_ocr:       m.lectura_ocr       || null,
-              confianza_ocr:     m.confianza_ocr     || null,
-              calidad_foto:      m.calidad_foto       || 'buena',
-              motivo_calidad:    m.motivo_calidad     || null,
-              nota_ocr:          m.nota_ocr           || null,
-              es_medidor:        m.es_medidor         !== undefined ? m.es_medidor : true,
-              sin_acceso:        m.sin_acceso         || false,
-              motivo_sin_acceso: m.motivo_sin_acceso  || null,
+              sin_acceso:        m.sin_acceso        || false,
+              motivo_sin_acceso: m.motivo_sin_acceso || null,
             };
             continue;
           }
 
-          // ── CASO B: foto tomada offline → subir y correr OCR ──────────
+          // ── CASO B: foto tomada offline → subir ahora ──────────────────
           const tieneArchivoLocal = m.foto_file || m.foto_base64;
 
           if (tieneArchivoLocal) {
-            let uploadedOcr = null;
+            let fotoPath = null;
             try {
               const formData = new FormData();
               if (m.foto_base64) {
@@ -73,44 +63,20 @@ export async function syncPendingVisits(onProgress) {
               } else {
                 formData.append('foto', m.foto_file, `${tipo}_${Date.now()}.jpg`);
               }
-              formData.append('tipo', tipo);
-              formData.append('modo', 'preciso'); // doble verificación en sync offline
-
-              const { data: ocrResult } = await api.post('/visits/ocr-preview', formData, {
+              const { data: uploadResult } = await api.post('/visits/upload-photo', formData, {
                 headers: { 'Content-Type': 'multipart/form-data' },
               });
-              uploadedOcr = ocrResult;
+              fotoPath = uploadResult.foto_path;
             } catch (photoErr) {
               console.warn(`[sync] No se pudo subir foto de ${tipo}:`, photoErr.message);
             }
 
-            if (uploadedOcr) {
-              const discrepancia = uploadedOcr.lectura && m.lectura && uploadedOcr.lectura !== m.lectura;
-              const noEsMedidor  = uploadedOcr.es_medidor === false;
-
-              medidoresResueltos[tipo] = {
-                foto_path:         uploadedOcr.foto_path,
-                lectura:           m.lectura || uploadedOcr.lectura || null,
-                lectura_ocr:       uploadedOcr.lectura,
-                confianza_ocr:     uploadedOcr.confianza,
-                calidad_foto:      uploadedOcr.calidad_foto,
-                motivo_calidad:    uploadedOcr.motivo_calidad,
-                nota_ocr:          uploadedOcr.nota,
-                es_medidor:        uploadedOcr.es_medidor,
-                sin_acceso:        m.sin_acceso        || false,
-                motivo_sin_acceso: m.motivo_sin_acceso || null,
-                requiere_revision: noEsMedidor || !m.lectura || uploadedOcr.calidad_foto === 'mala' || discrepancia,
-              };
-            } else {
-              // Foto no subible — conservar lectura manual si la hay
-              medidoresResueltos[tipo] = {
-                foto_path:         null,
-                lectura:           m.lectura           || null,
-                sin_acceso:        m.sin_acceso        || false,
-                motivo_sin_acceso: m.motivo_sin_acceso || null,
-                requiere_revision: !m.lectura && !m.sin_acceso,
-              };
-            }
+            medidoresResueltos[tipo] = {
+              foto_path:         fotoPath || null,
+              lectura:           m.lectura           || null,
+              sin_acceso:        m.sin_acceso        || false,
+              motivo_sin_acceso: m.motivo_sin_acceso || null,
+            };
           } else {
             // ── CASO C: entrada manual o sin_acceso, sin foto ─────────────
             medidoresResueltos[tipo] = {
@@ -118,12 +84,11 @@ export async function syncPendingVisits(onProgress) {
               lectura:           m.lectura           || null,
               sin_acceso:        m.sin_acceso        || false,
               motivo_sin_acceso: m.motivo_sin_acceso || null,
-              requiere_revision: !m.lectura && !m.sin_acceso,
             };
           }
         }
 
-        // ── Paso 2: crear la visita en el servidor ──────────────────────
+        // ── Crear la visita en el servidor ──────────────────────────────
         const body = {
           latitud:       visit.latitud,
           longitud:      visit.longitud,
@@ -139,7 +104,6 @@ export async function syncPendingVisits(onProgress) {
 
         await api.post('/visits', body);
 
-        // ── Paso 3: eliminar de cola local ─────────────────────────────
         await deletePendingVisit(visit.localId);
         onProgress?.({ type: 'done', localId: visit.localId });
 

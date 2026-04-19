@@ -37,7 +37,7 @@ function formatGPSAge(ms) {
 
 const EMPTY_MEDIDOR = {
   foto: null, preview: null, lectura: '', foto_path: null,
-  foto_file: null, ocr_meta: null, sin_acceso: false, motivo_sin_acceso: null,
+  foto_file: null, sin_acceso: false, motivo_sin_acceso: null,
 };
 
 export default function NewVisit() {
@@ -292,13 +292,8 @@ export default function NewVisit() {
     setMedidores(prev => ({ ...prev, [tipo]: { ...prev[tipo], foto_file: file } }));
   };
 
-  const medidorInvalido = step === 1 && ['luz', 'agua', 'gas'].some(
-    tipo => medidores[tipo].ocr_meta?.es_medidor === false && !medidores[tipo].sin_acceso
-  );
-
   const canNext = () => {
     if (step === 0) return ciudadId && conjuntoId && apartamento.trim();
-    if (step === 1) return !medidorInvalido;
     return true;
   };
 
@@ -381,8 +376,6 @@ export default function NewVisit() {
           lectura:           m.lectura           || null,
           sin_acceso:        m.sin_acceso        || false,
           motivo_sin_acceso: m.motivo_sin_acceso || null,
-          ...(m.ocr_meta || {}),
-          requiere_revision: !m.lectura && !m.sin_acceso,
         };
       }
       return acc;
@@ -634,9 +627,9 @@ export default function NewVisit() {
           </div>
 
           {online
-            ? <p className={styles.hint}>Toma la foto de cada medidor. La IA leerá el número — solo toca si está mal.</p>
+            ? <p className={styles.hint}>Toma la foto de cada medidor e ingresa la lectura. La IA verificará los datos al guardar.</p>
             : <p className={`${styles.hint} ${styles.hintOffline}`}>
-                📵 Sin conexión — ingresa las lecturas manualmente. Las fotos se procesarán con IA al sincronizar.
+                📵 Sin conexión — ingresa las lecturas manualmente. La IA analizará las fotos al sincronizar.
               </p>
           }
 
@@ -684,12 +677,6 @@ export default function NewVisit() {
       )}
 
       {error && <div className={styles.error}>{error}</div>}
-
-      {medidorInvalido && (
-        <div className={styles.error}>
-          ⚠️ Retoma la foto del medidor o márcalo como "Sin evidencia" para continuar.
-        </div>
-      )}
 
       {/* Botón guardar progreso (aparece cuando hay borrador activo, paso 1 o 2) */}
       {currentDraftId && step >= 1 && (

@@ -4,11 +4,11 @@ const { pool } = require('../models/db');
 const { authMiddleware } = require('../middleware/auth');
 const upload = require('../middleware/upload');
 const { analizarMedidor } = require('../services/ocr');
+const logger = require('../middleware/logger');
 const ah = require('../middleware/asyncHandler');
 
 // ─────────────────────────────────────────────
 // GET /api/visits/check-duplicate
-// Verifica si ya existe una visita para el mismo apartamento en el mes actual
 // ─────────────────────────────────────────────
 router.get('/check-duplicate', authMiddleware, ah(async (req, res) => {
   const { conjunto_id, torre_id, apartamento } = req.query;
@@ -35,28 +35,69 @@ router.get('/check-duplicate', authMiddleware, ah(async (req, res) => {
 }));
 
 // ─────────────────────────────────────────────
-// POST /api/visits/ocr-preview
-// OCR inmediato de una foto sin guardar visita aún
+// POST /api/visits/upload-photo
+// Sube la foto y devuelve foto_path. Sin OCR.
 // ─────────────────────────────────────────────
 router.post(
-  '/ocr-preview',
+  '/upload-photo',
   authMiddleware,
   upload.single('foto'),
   ah(async (req, res) => {
-    const { tipo } = req.body;
     if (!req.file) return res.status(400).json({ error: 'foto requerida' });
-    if (!['luz', 'agua', 'gas'].includes(tipo)) return res.status(400).json({ error: 'tipo inválido' });
-
-    const absolutePath = path.join(__dirname, '../../', process.env.UPLOADS_DIR || 'uploads', req.file.filename);
-    const modoOcr = req.body.modo === 'preciso' ? 'preciso' : 'rapido';
-    const result = await analizarMedidor(absolutePath, tipo, { modo: modoOcr });
-    res.json({ ...result, foto_path: req.file.filename });
+    res.json({ foto_path: req.file.filename });
   })
 );
 
 // ─────────────────────────────────────────────
+// OCR asíncrono post-guardado
+// ─────────────────────────────────────────────
+async function runOcrForMedidor(medidorId, absoluteFotoPath, tipo, lecturaAuditor) {
+  try {
+    const result = await analizarMedidor(absoluteFotoPath, tipo, { modo: 'rapido' });
+
+    const [rows] = await pool.query(
+      'SELECT delta, sin_acceso FROM medidores WHERE id = ?',
+      [medidorId]
+    );
+    if (!rows.length) return;
+
+    const { delta, sin_acceso } = rows[0];
+
+    const flagDelta      = delta !== null && delta <= 0;
+    const flagAcceso     = !!sin_acceso;
+    const flagCalidad    = result.calidad_foto === 'mala';
+    const flagNoMedidor  = result.es_medidor === false;
+    const flagDiscrep    = !!(result.lectura && lecturaAuditor && result.lectura !== lecturaAuditor);
+    const flagSinLectura = !result.lectura && !lecturaAuditor && !flagAcceso;
+    const flagConfianza  = result.confianza === 'baja';
+
+    const requiereRevision = (
+      flagDelta || flagAcceso || flagCalidad || flagNoMedidor ||
+      flagDiscrep || flagSinLectura || flagConfianza
+    ) ? 1 : 0;
+
+    await pool.query(
+      `UPDATE medidores SET
+         lectura_ocr    = ?, confianza_ocr  = ?, calidad_foto   = ?,
+         motivo_calidad = ?, nota_ocr       = ?, es_medidor     = ?,
+         requiere_revision = ?
+       WHERE id = ?`,
+      [
+        result.lectura || null, result.confianza, result.calidad_foto,
+        result.motivo_calidad || null, result.nota || null,
+        result.es_medidor ? 1 : 0,
+        requiereRevision,
+        medidorId,
+      ]
+    );
+  } catch (err) {
+    logger.error(`OCR async failed for medidor ${medidorId}: ${err.message}`);
+  }
+}
+
+// ─────────────────────────────────────────────
 // POST /api/visits
-// Crear visita. Las fotos ya fueron subidas vía /ocr-preview.
+// Crear visita. OCR corre en background tras guardar.
 // ─────────────────────────────────────────────
 router.post('/', authMiddleware, ah(async (req, res) => {
   const conn = await pool.getConnection();
@@ -73,7 +114,6 @@ router.post('/', authMiddleware, ah(async (req, res) => {
       return res.status(400).json({ error: 'ciudad_id, conjunto_id y apartamento son obligatorios' });
     }
 
-    // ── Insertar visita ──
     const [visitResult] = await conn.query(
       `INSERT INTO visitas
         (auditor_id, latitud, longitud, ciudad_id, conjunto_id, torre_id, apartamento, observaciones, hora_inicio, hora_fin)
@@ -91,21 +131,18 @@ router.post('/', authMiddleware, ah(async (req, res) => {
     );
     const visitaId = visitResult.insertId;
 
-    // ── Registrar cada medidor ──
+    // medidores que necesitarán OCR tras el commit
+    const ocrQueue = [];
+
     for (const tipo of ['luz', 'agua', 'gas']) {
       const m = medidoresBody[tipo];
       if (!m) continue;
 
-      const {
-        foto_path, lectura,
-        lectura_ocr, confianza_ocr, calidad_foto, motivo_calidad, nota_ocr,
-        sin_acceso, motivo_sin_acceso,
-        es_medidor,
-      } = m;
+      const { foto_path, lectura, sin_acceso, motivo_sin_acceso } = m;
 
       if (!foto_path && !lectura && !sin_acceso) continue;
 
-      // ── Delta histórico: buscar lectura anterior del mismo apto + tipo ──
+      // Delta histórico
       let lecturaAnterior = null;
       let delta = null;
       let primeraLectura = false;
@@ -137,16 +174,14 @@ router.post('/', authMiddleware, ah(async (req, res) => {
         }
       }
 
-      // ── Determinar requiere_revision ──
-      const flagCalidad      = (calidad_foto === 'mala');
-      const flagLectura      = !lectura && !sin_acceso;
-      const flagDelta        = delta !== null && delta <= 0;
-      const flagAcceso       = !!sin_acceso;
-      const flagDiscrepancia = !!(lectura_ocr && lectura && lectura_ocr !== lectura);
+      const flagDelta   = delta !== null && delta <= 0;
+      const flagAcceso  = !!sin_acceso;
+      const flagFoto    = !!foto_path; // OCR pending
+      const flagManual  = !lectura && !sin_acceso && !foto_path;
 
-      const requiereRevision = flagCalidad || flagLectura || flagDelta || flagAcceso || flagDiscrepancia ? 1 : 0;
+      const requiereRevision = (flagDelta || flagAcceso || flagFoto || flagManual) ? 1 : 0;
 
-      await conn.query(
+      const [insertResult] = await conn.query(
         `INSERT INTO medidores
           (visita_id, tipo, foto_path,
            lectura_ocr, confianza_ocr, calidad_foto, motivo_calidad, nota_ocr,
@@ -157,18 +192,33 @@ router.post('/', authMiddleware, ah(async (req, res) => {
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           visitaId, tipo, foto_path || null,
-          lectura_ocr || null, confianza_ocr || null,
-          calidad_foto || 'buena', motivo_calidad || null, nota_ocr || null,
+          null, null, 'buena', null, null,
           lectura || null, requiereRevision,
           sin_acceso ? 1 : 0, motivo_sin_acceso || null,
-          es_medidor === false ? 0 : 1,
+          1,
           lecturaAnterior, delta, primeraLectura ? 1 : 0,
         ]
       );
+
+      if (foto_path) {
+        ocrQueue.push({ medidorId: insertResult.insertId, foto_path, tipo, lectura: lectura || null });
+      }
     }
 
     await conn.commit();
     res.status(201).json({ id: visitaId, message: 'Visita registrada correctamente' });
+
+    // OCR en background — no bloquea la respuesta
+    if (ocrQueue.length > 0) {
+      setImmediate(() => {
+        const uploadsDir = path.join(__dirname, '../../', process.env.UPLOADS_DIR || 'uploads');
+        for (const { medidorId, foto_path, tipo, lectura } of ocrQueue) {
+          const absolutePath = path.join(uploadsDir, foto_path);
+          runOcrForMedidor(medidorId, absolutePath, tipo, lectura);
+        }
+      });
+    }
+
   } catch (err) {
     await conn.rollback();
     throw err;

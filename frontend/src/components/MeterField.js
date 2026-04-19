@@ -20,43 +20,14 @@ const MOTIVOS_SIN_ACCESO = [
 ];
 
 export default function MeterField({ tipo, data, onChange, onFile, isOnline = true }) {
-  const inputRef        = useRef();
-  const meta            = META[tipo];
-  const [ocrLoading, setOcrLoading]   = useState(false);
-  const [imgLoading, setImgLoading]   = useState(() => !!data.preview);
-  const [imgError,   setImgError]     = useState(false);
+  const inputRef = useRef();
+  const meta     = META[tipo];
 
-  // Restaurar resultado OCR desde ocr_meta guardado en el borrador
-  const [ocrResult, setOcrResult] = useState(() => {
-    const m = data.ocr_meta;
-    if (!m) return null;
-    return {
-      lectura:           m.lectura_ocr    ?? null,
-      confianza:         m.confianza_ocr  ?? 'baja',
-      calidad_foto:      m.calidad_foto   ?? 'buena',
-      motivo_calidad:    m.motivo_calidad ?? null,
-      nota:              m.nota_ocr       ?? '',
-      requiere_revision: m.requiere_revision ?? false,
-      es_medidor:        m.es_medidor     !== undefined ? m.es_medidor : true,
-    };
-  });
-
-  // editando = true si hubo OCR, calidad ok, pero aún no hay lectura confirmada
-  const [editando, setEditando] = useState(() => {
-    const m = data.ocr_meta;
-    if (!m || data.lectura) return false;
-    return m.calidad_foto !== 'mala' && m.es_medidor !== false;
-  });
-
-  const [sinAcceso, setSinAcceso]       = useState(() => data.sin_acceso ? true : false);
+  const [uploading,   setUploading]   = useState(false);
+  const [imgLoading,  setImgLoading]  = useState(() => !!data.preview);
+  const [imgError,    setImgError]    = useState(false);
+  const [sinAcceso,   setSinAcceso]   = useState(() => data.sin_acceso ? true : false);
   const [motivoAcceso, setMotivoAcceso] = useState(() => data.motivo_sin_acceso || '');
-
-  // fotoMala = true si la foto fue rechazada y el auditor aún no ingresó lectura
-  const [fotoMala, setFotoMala] = useState(() => {
-    const m = data.ocr_meta;
-    if (!m || data.lectura) return false;
-    return m.calidad_foto === 'mala' || m.es_medidor === false;
-  });
 
   const handleFile = async e => {
     const file = e.target.files[0];
@@ -64,12 +35,9 @@ export default function MeterField({ tipo, data, onChange, onFile, isOnline = tr
 
     onChange('preview', URL.createObjectURL(file));
     onChange('lectura', '');
-    setOcrResult(null);
-    setEditando(false);
-    setFotoMala(false);
+    onChange('foto_path', null);
     setImgLoading(true);
     setImgError(false);
-    // Si tenía "sin acceso" seleccionado, la foto lo cancela
     setSinAcceso(false);
     setMotivoAcceso('');
     onChange('sin_acceso', false);
@@ -77,47 +45,29 @@ export default function MeterField({ tipo, data, onChange, onFile, isOnline = tr
 
     let fileToUpload = file;
     try { fileToUpload = await compressImage(file); } catch { /* usar original */ }
-    onChange('foto', fileToUpload);
-    onFile?.(fileToUpload); // guardar referencia para sync offline
 
-    // ── Sin conexión: guardar foto y pedir entrada manual ──
+    onFile?.(fileToUpload);
+
     if (!isOnline) {
-      setOcrResult({ lectura: null, confianza: 'baja', calidad_foto: 'buena', nota: 'Sin conexión — lectura manual' });
-      setEditando(true);
+      // Offline: guardar archivo local, el auditor ingresa lectura manual
+      onChange('foto', fileToUpload);
       return;
     }
 
-    // ── Con conexión: subir y correr OCR ──
-    setOcrLoading(true);
+    // Online: subir foto, obtener foto_path
+    setUploading(true);
     try {
       const formData = new FormData();
       formData.append('foto', fileToUpload);
-      formData.append('tipo', tipo);
-      const { data: result } = await api.post('/visits/ocr-preview', formData, {
+      const { data: result } = await api.post('/visits/upload-photo', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
-
-      setOcrResult(result);
-      onChange('lectura', result.lectura || '');
       onChange('foto_path', result.foto_path);
-      onChange('ocr_meta', {
-        lectura_ocr:    result.lectura,
-        confianza_ocr:  result.confianza,
-        calidad_foto:   result.calidad_foto,
-        motivo_calidad: result.motivo_calidad,
-        nota_ocr:       result.nota,
-        requiere_revision: result.requiere_revision,
-        es_medidor:     result.es_medidor,
-      });
-
-      if (result.calidad_foto === 'mala' || result.es_medidor === false) setFotoMala(true);
-      else if (!result.lectura) setEditando(true);
     } catch {
-      // Error de red o servidor — no bloquear con fotoMala, permitir entrada manual
-      setOcrResult({ lectura: null, confianza: 'baja', calidad_foto: 'buena', nota: 'No se pudo conectar con el servidor de análisis', es_medidor: true });
-      setEditando(true);
+      // Fallo de red: guardar archivo local para sync offline
+      onChange('foto', fileToUpload);
     } finally {
-      setOcrLoading(false);
+      setUploading(false);
     }
   };
 
@@ -126,10 +76,6 @@ export default function MeterField({ tipo, data, onChange, onFile, isOnline = tr
     onChange('preview', null);
     onChange('lectura', '');
     onChange('foto_path', null);
-    onChange('ocr_meta', null);
-    setOcrResult(null);
-    setEditando(false);
-    setFotoMala(false);
     if (inputRef.current) inputRef.current.value = '';
   };
 
@@ -138,7 +84,6 @@ export default function MeterField({ tipo, data, onChange, onFile, isOnline = tr
     setSinAcceso(true);
     onChange('sin_acceso', true);
     onChange('motivo_sin_acceso', motivoAcceso);
-    onChange('ocr_meta', { requiere_revision: true });
   };
 
   const cancelarSinAcceso = () => {
@@ -146,10 +91,9 @@ export default function MeterField({ tipo, data, onChange, onFile, isOnline = tr
     setMotivoAcceso('');
     onChange('sin_acceso', false);
     onChange('motivo_sin_acceso', null);
-    onChange('ocr_meta', null);
   };
 
-  // ── Si el medidor fue marcado sin acceso (confirmado, no en selección) ─
+  // Medidor confirmado sin acceso
   if (sinAcceso === true) {
     return (
       <div className={styles.card}>
@@ -193,7 +137,6 @@ export default function MeterField({ tipo, data, onChange, onFile, isOnline = tr
               style={{ display: imgLoading ? 'none' : 'block' }}
               onLoad={() => setImgLoading(false)}
               onError={() => {
-                // Si la URL del servidor falla, intentar desde foto_file local
                 if (data.foto_file) {
                   onChange('preview', URL.createObjectURL(data.foto_file));
                   setImgLoading(true);
@@ -260,104 +203,31 @@ export default function MeterField({ tipo, data, onChange, onFile, isOnline = tr
         </div>
       )}
 
-      {/* Procesando */}
-      {ocrLoading && (
+      {/* Subiendo foto */}
+      {uploading && (
         <div className={styles.ocrLoading}>
           <span className={styles.spinner} />
-          Leyendo medidor con IA...
+          Subiendo foto...
         </div>
       )}
 
-      {/* Alerta: foto mala → retomar */}
-      {!ocrLoading && fotoMala && ocrResult && (
-        <div className={styles.fotoMalaBox}>
-          <div className={styles.fotoMalaHeader}>
-            <span>{ocrResult.es_medidor === false ? '🚫 No es un medidor' : '📷 Foto no válida'}</span>
-            {ocrResult.motivo_calidad && (
-              <span className={styles.fotoMalaMotivo}>{ocrResult.motivo_calidad}</span>
-            )}
-          </div>
-          <p className={styles.fotoMalaTexto}>
-            {ocrResult.es_medidor === false
-              ? 'La imagen no contiene un medidor. Debes fotografiar el medidor correspondiente.'
-              : 'La foto no cumple los requisitos contractuales. Por favor retoma con mejor iluminación y encuadre.'}
-          </p>
-          <div className={styles.fotoMalaAcciones}>
-            <button className={styles.btnRetomar} onClick={remove}>
-              📷 Retomar foto
-            </button>
-            {ocrResult.es_medidor !== false && (
-              <button
-                className={styles.btnContinuarMala}
-                onClick={() => {
-                  setFotoMala(false);
-                  if (!ocrResult.lectura) setEditando(true);
-                }}
-              >
-                Continuar igual
-              </button>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Resultado: IA detectó (online) o lectura manual confirmada (offline) */}
-      {!ocrLoading && !fotoMala && ocrResult && (ocrResult.lectura || data.lectura) && !editando && (
-        <div className={styles.resultOk}>
-          {ocrResult.calidad_foto === 'aceptable' && (
-            <div className={styles.calidadAceptable}>
-              ⚠️ Foto con calidad aceptable{ocrResult.motivo_calidad ? ` — ${ocrResult.motivo_calidad}` : ''}
-            </div>
-          )}
-          <div className={styles.resultRow}>
-            <div className={styles.resultValor}>
-              <span className={styles.resultLabel}>
-                {ocrResult.lectura ? 'IA detectó' : 'Lectura registrada'}
-              </span>
-              <span className={styles.resultNum}>{data.lectura || ocrResult.lectura}</span>
-            </div>
-            <button className={styles.btnCorregir} onClick={() => setEditando(true)}>
-              ✏️ Corregir
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Edición: corregir o ingresar cuando no detectó */}
-      {!ocrLoading && !fotoMala && ocrResult && editando && (
-        <div className={styles.editBox}>
-          <label className={styles.editLabel}>
-            {ocrResult.lectura
-              ? `IA leyó "${ocrResult.lectura}" — ingresa el valor correcto:`
-              : data.lectura
-                ? `Lectura actual: "${data.lectura}" — puedes corregirla:`
-                : isOnline
-                  ? 'La IA no pudo leer el medidor — ingresa la lectura manualmente:'
-                  : 'Sin conexión — ingresa la lectura manualmente:'}
-          </label>
-          <div className={styles.inputRow}>
-            <input
-              type="text"
-              inputMode="decimal"
-              value={data.lectura}
-              onChange={e => onChange('lectura', e.target.value)}
-              placeholder="Ej: 00201.2"
-              autoFocus
-            />
-            <button
-              className={styles.btnGuardar}
-              onClick={() => setEditando(false)}
-              disabled={!data.lectura}
-            >
-              ✓
-            </button>
-          </div>
-          {ocrResult.nota && <p className={styles.ocrNota}>💬 {ocrResult.nota}</p>}
+      {/* Lectura: siempre visible cuando hay foto */}
+      {data.preview && !uploading && (
+        <div className={styles.manualFallback}>
+          <label>Ingresa la lectura del medidor:</label>
+          <input
+            type="text"
+            inputMode="decimal"
+            value={data.lectura}
+            onChange={e => onChange('lectura', e.target.value)}
+            placeholder="Ej: 00201.2"
+            autoFocus
+          />
         </div>
       )}
 
       {/* Sin foto: campo manual simple */}
-      {!data.preview && !ocrLoading && sinAcceso !== 'seleccionar' && (
+      {!data.preview && !uploading && sinAcceso !== 'seleccionar' && (
         <div className={styles.manualFallback}>
           <label>O ingresa la lectura manualmente:</label>
           <input
