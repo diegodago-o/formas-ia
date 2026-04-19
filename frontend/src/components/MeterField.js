@@ -22,12 +22,39 @@ const MOTIVOS_SIN_ACCESO = [
 export default function MeterField({ tipo, data, onChange, onFile, isOnline = true }) {
   const inputRef        = useRef();
   const meta            = META[tipo];
-  const [ocrLoading, setOcrLoading]       = useState(false);
-  const [ocrResult, setOcrResult]         = useState(null);
-  const [editando, setEditando]           = useState(false);
-  const [sinAcceso, setSinAcceso]         = useState(() => data.sin_acceso ? true : false);
-  const [motivoAcceso, setMotivoAcceso]   = useState(() => data.motivo_sin_acceso || '');
-  const [fotoMala, setFotoMala]           = useState(false);
+  const [ocrLoading, setOcrLoading] = useState(false);
+
+  // Restaurar resultado OCR desde ocr_meta guardado en el borrador
+  const [ocrResult, setOcrResult] = useState(() => {
+    const m = data.ocr_meta;
+    if (!m) return null;
+    return {
+      lectura:           m.lectura_ocr    ?? null,
+      confianza:         m.confianza_ocr  ?? 'baja',
+      calidad_foto:      m.calidad_foto   ?? 'buena',
+      motivo_calidad:    m.motivo_calidad ?? null,
+      nota:              m.nota_ocr       ?? '',
+      requiere_revision: m.requiere_revision ?? false,
+      es_medidor:        m.es_medidor     !== undefined ? m.es_medidor : true,
+    };
+  });
+
+  // editando = true si hubo OCR, calidad ok, pero aún no hay lectura confirmada
+  const [editando, setEditando] = useState(() => {
+    const m = data.ocr_meta;
+    if (!m || data.lectura) return false;
+    return m.calidad_foto !== 'mala' && m.es_medidor !== false;
+  });
+
+  const [sinAcceso, setSinAcceso]       = useState(() => data.sin_acceso ? true : false);
+  const [motivoAcceso, setMotivoAcceso] = useState(() => data.motivo_sin_acceso || '');
+
+  // fotoMala = true si la foto fue rechazada y el auditor aún no ingresó lectura
+  const [fotoMala, setFotoMala] = useState(() => {
+    const m = data.ocr_meta;
+    if (!m || data.lectura) return false;
+    return m.calidad_foto === 'mala' || m.es_medidor === false;
+  });
 
   const handleFile = async e => {
     const file = e.target.files[0];
