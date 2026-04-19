@@ -53,7 +53,7 @@ router.post(
 // ─────────────────────────────────────────────
 async function runOcrForMedidor(medidorId, absoluteFotoPath, tipo, lecturaAuditor) {
   try {
-    const result = await analizarMedidor(absoluteFotoPath, tipo, { modo: 'rapido' });
+    const result = await analizarMedidor(absoluteFotoPath, tipo, { modo: 'preciso' });
 
     const [rows] = await pool.query(
       'SELECT delta, sin_acceso FROM medidores WHERE id = ?',

@@ -17,10 +17,10 @@ async function preprocessImage(inputPath) {
     `ocr_${Date.now()}_${path.basename(inputPath)}.jpg`
   );
   await sharp(inputPath)
-    .rotate()                                              // auto-rotar por EXIF
+    .rotate()
     .resize(2048, 2048, { fit: 'inside', withoutEnlargement: true })
-    .sharpen({ sigma: 1.0 })                              // nitidez suave
-    .modulate({ saturation: 1.4, brightness: 1.05 })     // realza colores (rojo vs negro más distinguibles)
+    .sharpen({ sigma: 1.0 })
+    .modulate({ saturation: 1.4, brightness: 1.05 })
     .jpeg({ quality: 93 })
     .toFile(tmpPath);
   return tmpPath;
@@ -33,8 +33,8 @@ async function llamarModelo(imageBuffer, mediaType, prompt) {
   const base64 = imageBuffer.toString('base64');
   const response = await client.chat.completions.create({
     model: OPENAI_MODEL,
-    max_completion_tokens: 500,
-    temperature: 0,          // máxima determinismo — misma imagen, misma respuesta
+    max_completion_tokens: 600,
+    temperature: 0,
     messages: [{
       role: 'user',
       content: [
@@ -56,10 +56,10 @@ async function llamarModelo(imageBuffer, mediaType, prompt) {
 // Parsear resultado del modelo a formato estándar
 // ─────────────────────────────────────────────────────────────
 function parsearResultado(json) {
-  const calidad    = json.calidad_foto || 'buena';
-  const esMedidor  = json.es_medidor !== false;
-  const lectura    = json.lectura ?? null;
-  const confianza  = json.confianza ?? 'baja';
+  const calidad   = json.calidad_foto || 'buena';
+  const esMedidor = json.es_medidor !== false;
+  const lectura   = json.lectura ?? null;
+  const confianza = json.confianza ?? 'baja';
   return {
     es_medidor:        esMedidor,
     lectura,
@@ -73,155 +73,178 @@ function parsearResultado(json) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// PROMPTS — Primera pasada
+// Descripción común de medidores válidos en Colombia
+// ─────────────────────────────────────────────────────────────
+const ES_MEDIDOR_REGLA = `
+MEDIDOR VÁLIDO (es_medidor=true): cualquier equipo de medición de servicios públicos domiciliarios.
+Incluye sin excepción: medidores de gas (IMUSA, Elster, Actaris, Samsung Jeil, Sensus, carcasa metálica plateada o blanca, marcados G-1/G-1.6/G-2.5/G-4/G-6, con ventanilla de tambores en la parte superior), medidores de agua (carcasa azul o gris, ACTARIS, Itron, Sensus, ISOIL), medidores de electricidad (LCD digital, tambores mecánicos, EDMI, Landis+Gyr, ABB, Circutor, ZIV).
+Señales clave: display con números rotatorios o LCD, sello de empresa de servicios, unidades m³ o kWh, sticker de calibración, cuerpo de metal o plástico robusto con conectores de tubería o cable.
+es_medidor=false ÚNICAMENTE si la imagen claramente NO contiene ningún equipo de medición: persona, animal, comida, mueble, pared vacía, vehículo, paisaje.`.trim();
+
+// ─────────────────────────────────────────────────────────────
+// PROMPTS — Primera pasada con enumeración dígito a dígito
 // ─────────────────────────────────────────────────────────────
 const PROMPTS_COT = {
 
   gas: `Eres un experto en lectura de medidores de gas domiciliario en Colombia.
 
-TAREA: Extrae la lectura del medidor de gas en esta imagen.
+TAREA: Lee el display de tambores giratorios y extrae la lectura.
 
-CÓMO IDENTIFICAR EL DISPLAY:
-- Busca la ventanilla rectangular pequeña con tambores giratorios (como odómetro)
-- Dígitos NEGROS = metros cúbicos (parte entera): exactamente 5 dígitos. Dígitos ROJOS = decimales: exactamente 3 dígitos
-- Formato siempre: NNNNN.NNN (ej: 00201.234)
-- Si un tambor está entre dos números, usa SIEMPRE el inferior (entre 3 y 4 → usa 3)
-- IGNORA el número de serie grabado en el cuerpo metálico del medidor, stickers y códigos de barras
+DISPLAY: ventanilla rectangular con 8 posiciones totales.
+- Posiciones 1-5 dígitos NEGROS = metros cúbicos (parte entera)
+- Posiciones 6-8 dígitos ROJOS = decimales
+- Formato obligatorio: NNNNN.NNN  (ej: 00201.655)
 
-EJEMPLO: 5 tambores negros "00201" y 3 rojos "234" → lectura "00201.234"
+MÉTODO — sigue estos pasos en orden:
+1. Localiza la ventanilla (ignora número de serie en el cuerpo, stickers, etiqueta amarilla de apartamento)
+2. Cuenta las 8 posiciones de izquierda a derecha
+3. Anota cada dígito individualmente en "digitos_individuales" (ej: "0,0,2,0,1 | 6,5,5")
+4. Si un tambor queda entre dos dígitos → usa el INFERIOR (entre 5 y 6 → escribe 5)
+5. Confusiones frecuentes: examina con cuidado 0↔6, 1↔7, 3↔8, 5↔6 antes de decidir
+6. Combina: los 5 primeros + punto + los 3 últimos
 
-CONFIANZA: "alta" si todos los dígitos son claros. "baja" si 2 o más son inciertos.
-CALIDAD: "buena" / "aceptable" (algo de reflejo) / "mala" (ilegible o muy oscuro).
-Si calidad es "aceptable" o "mala", agrega el campo "motivo_calidad" con una frase corta. Si es "buena", NO incluyas ese campo.
-"es_medidor": false SOLO si la imagen claramente NO contiene ningún medidor de servicios (mueble, pared, persona, etc.). Un medidor de cualquier tipo (gas, agua, luz) cuenta como true.
+CONFIANZA: "alta" si los 8 dígitos son claros. "baja" si 2 o más son dudosos.
+CALIDAD: "buena" / "aceptable" (reflejo, poca luz) / "mala" (ilegible).
+Si calidad es "aceptable" o "mala", incluye "motivo_calidad" con frase corta.
+
+${ES_MEDIDOR_REGLA}
 
 Responde SOLO con este JSON (sin texto adicional):
 {
   "es_medidor": true,
-  "lectura": "00201.234",
+  "digitos_individuales": "0,0,2,0,1 | 6,5,5",
+  "lectura": "00201.655",
   "confianza": "alta",
   "calidad_foto": "buena",
-  "nota": "una oración describiendo los dígitos que viste en la ventanilla"
+  "nota": "frase describiendo el display y los dígitos vistos"
 }`,
 
   agua: `Eres un experto en lectura de medidores de agua domiciliario en Colombia.
 
-TAREA: Extrae la lectura del medidor de agua en esta imagen.
+TAREA: Lee el display de tambores giratorios y extrae la lectura.
 
-CÓMO IDENTIFICAR EL DISPLAY:
-- Busca la ventanilla ovalada o rectangular del frente del medidor (carcasa generalmente azul)
-- Contiene tambores giratorios con dígitos 0-9
-- Los primeros 4 dígitos NEGROS = metros cúbicos (parte entera). Los últimos 4 dígitos ROJOS = decimales
-- Formato siempre: NNNN.NNNN (ej: 0134.8423)
-- Si un tambor está entre dos números, usa SIEMPRE el inferior
-- Si hay duda sobre si un dígito es rojo o negro por reflejo, trátalo como NEGRO
-- IGNORA el número de serie grabado en el metal del cuerpo (ej: "22016683"), stickers
+DISPLAY: ventanilla ovalada o rectangular con 8 posiciones totales.
+- Posiciones 1-4 dígitos NEGROS = metros cúbicos (parte entera)
+- Posiciones 5-8 dígitos ROJOS = decimales
+- Formato obligatorio: NNNN.NNNN  (ej: 0134.8423)
 
-EJEMPLO: tambores negros "0134" y rojos "8423" → lectura "0134.8423"
+MÉTODO — sigue estos pasos en orden:
+1. Localiza la ventanilla del frente (carcasa generalmente azul o gris)
+2. Ignora el número de serie grabado en el metal del cuerpo — NO es la lectura
+3. Cuenta las 8 posiciones de izquierda a derecha
+4. Anota cada dígito individualmente en "digitos_individuales" (ej: "0,1,3,4 | 8,4,2,3")
+5. Si un tambor queda entre dos dígitos → usa el INFERIOR
+6. Si hay duda entre rojo y negro por reflejo → trátalo como NEGRO
+7. Confusiones frecuentes: examina 0↔6, 1↔7, 3↔8, 5↔6 antes de decidir
 
-CONFIANZA: "alta" si todos los dígitos son claros. "baja" si 2 o más son inciertos.
+CONFIANZA: "alta" si los 8 dígitos son claros. "baja" si 2 o más son dudosos.
 CALIDAD: "buena" / "aceptable" / "mala".
-Si calidad es "aceptable" o "mala", agrega el campo "motivo_calidad" con una frase corta. Si es "buena", NO incluyas ese campo.
-"es_medidor": false SOLO si la imagen claramente NO contiene ningún medidor de servicios (mueble, pared, persona, etc.). Un medidor de cualquier tipo cuenta como true.
+Si calidad es "aceptable" o "mala", incluye "motivo_calidad" con frase corta.
+
+${ES_MEDIDOR_REGLA}
 
 Responde SOLO con este JSON (sin texto adicional):
 {
   "es_medidor": true,
+  "digitos_individuales": "0,1,3,4 | 8,4,2,3",
   "lectura": "0134.8423",
   "confianza": "alta",
   "calidad_foto": "buena",
-  "nota": "una oración describiendo los dígitos que viste en la ventanilla (no el número de serie)"
+  "nota": "frase describiendo el display y los dígitos vistos"
 }`,
 
   luz: `Eres un experto en lectura de medidores de energía eléctrica domiciliario en Colombia.
 
-TAREA: Extrae la lectura del medidor de luz en esta imagen.
+TAREA: Lee el display del medidor (tambores mecánicos o LCD digital) y extrae la lectura.
 
-CÓMO IDENTIFICAR EL DISPLAY:
-- Puede ser LCD digital (pantalla electrónica) o tambores mecánicos giratorios
-- Unidad: kWh. Exactamente 5 dígitos enteros y 3 decimales (rojos o después del separador)
-- Formato siempre: NNNNN.NNN (ej: 00452.123)
-- Si es mecánico y un tambor está entre dos números, usa SIEMPRE el inferior
-- IGNORA número de serie, stickers de empresa y texto de marca
+DISPLAY: 8 posiciones totales.
+- Posiciones 1-5 = parte entera (kWh)
+- Posiciones 6-8 = decimales (rojos en mecánico, o después del separador en LCD)
+- Formato obligatorio: NNNNN.NNN  (ej: 00452.123)
 
-EJEMPLO LCD: pantalla muestra "00452123" → lectura "00452.123"
-EJEMPLO mecánico: 5 tambores negros "00452" y 3 rojos "123" → lectura "00452.123"
+MÉTODO — sigue estos pasos en orden:
+1. Identifica el tipo de display: mecánico (tambores) o LCD (pantalla digital)
+2. Localiza las 8 posiciones (ignora número de serie, marca, stickers de empresa)
+3. Anota cada dígito individualmente en "digitos_individuales" (ej: "0,0,4,5,2 | 1,2,3")
+4. Si es mecánico y un tambor queda entre dos dígitos → usa el INFERIOR
+5. Confusiones frecuentes: examina 0↔6, 1↔7, 3↔8, 5↔6 antes de decidir
+6. En LCD: lee exactamente los dígitos visibles sin inventar posiciones
 
-CONFIANZA: "alta" si todos los dígitos son claros. "baja" si 2 o más son inciertos.
+CONFIANZA: "alta" si los 8 dígitos son claros. "baja" si 2 o más son dudosos.
 CALIDAD: "buena" / "aceptable" / "mala".
-Si calidad es "aceptable" o "mala", agrega el campo "motivo_calidad" con una frase corta. Si es "buena", NO incluyas ese campo.
-"es_medidor": false SOLO si la imagen claramente NO contiene ningún medidor de servicios (mueble, pared, persona, etc.). Un medidor de cualquier tipo cuenta como true.
+Si calidad es "aceptable" o "mala", incluye "motivo_calidad" con frase corta.
+
+${ES_MEDIDOR_REGLA}
 
 Responde SOLO con este JSON (sin texto adicional):
 {
   "es_medidor": true,
+  "digitos_individuales": "0,0,4,5,2 | 1,2,3",
   "lectura": "00452.123",
   "confianza": "alta",
   "calidad_foto": "buena",
-  "nota": "una oración describiendo qué viste (tipo display y dígitos)"
+  "nota": "frase describiendo tipo de display y dígitos vistos"
 }`,
 };
 
 // ─────────────────────────────────────────────────────────────
-// PROMPTS — Segunda pasada (perspectiva diferente, sin sesgo)
+// PROMPTS — Segunda pasada independiente (sin sesgo de la primera)
 // ─────────────────────────────────────────────────────────────
 const PROMPTS_VERIFICACION = {
 
-  gas: `Analiza esta imagen de un medidor de gas domiciliario.
+  gas: `Analiza esta imagen de un medidor de gas. Lee la ventanilla de tambores giratorios.
+NO leas el número de serie del cuerpo metálico, stickers ni etiquetas.
 
-Tu única tarea: leer los dígitos dentro de la ventanilla con tambores giratorios del medidor.
-NO leas el número de serie grabado en el cuerpo metálico.
-
-Método:
-1. Cuenta cuántas posiciones tiene la ventanilla
-2. Lee cada posición de derecha a izquierda (empieza por los rojos/decimales)
-3. Si un tambor está entre dos dígitos, toma el inferior
-4. Junta todo de izquierda a derecha para dar la lectura
+Pasos obligatorios:
+1. Cuenta las posiciones de la ventanilla (deben ser 8: 5 negras + 3 rojas)
+2. Lee cada posición de izquierda a derecha y anótala en "digitos_individuales"
+3. Si un tambor está entre dos dígitos → toma el inferior
+4. Revisa posibles confusiones: 0↔6, 1↔7, 3↔8, 5↔6
+5. Formato final: NNNNN.NNN
 
 Responde ÚNICAMENTE con JSON:
 {
-  "lectura": "XXXXX.XX o null si ilegible",
+  "lectura": "NNNNN.NNN o null si ilegible",
   "confianza": "alta | baja",
-  "digitos_individuales": "lista de lo que viste en cada posición",
-  "nota": "qué viste exactamente"
+  "digitos_individuales": "d1,d2,d3,d4,d5 | d6,d7,d8",
+  "nota": "qué viste exactamente en cada posición"
 }`,
 
-  agua: `Analiza esta imagen de un medidor de agua domiciliario.
+  agua: `Analiza esta imagen de un medidor de agua. Lee la ventanilla de tambores giratorios.
+El número de serie en el metal del cuerpo NO es la lectura — ignóralo completamente.
 
-Tu única tarea: leer los dígitos dentro de la ventanilla ovalada/rectangular del medidor.
-El número de serie grabado en el metal del cuerpo NO es la lectura — ignóralo completamente.
-
-Método:
-1. Localiza la ventanilla con los tambores (carcasa generalmente azul)
-2. Lee cada posición de derecha a izquierda (empieza por los rojos/decimales)
-3. Si un tambor está entre dos dígitos, toma el inferior
-4. Junta todo de izquierda a derecha
+Pasos obligatorios:
+1. Cuenta las posiciones de la ventanilla (deben ser 8: 4 negras + 4 rojas)
+2. Lee cada posición de izquierda a derecha y anótala en "digitos_individuales"
+3. Si un tambor está entre dos dígitos → toma el inferior
+4. Revisa posibles confusiones: 0↔6, 1↔7, 3↔8, 5↔6
+5. Formato final: NNNN.NNNN
 
 Responde ÚNICAMENTE con JSON:
 {
-  "lectura": "XXXXX.XX o null si ilegible",
+  "lectura": "NNNN.NNNN o null si ilegible",
   "confianza": "alta | baja",
-  "digitos_individuales": "lista de lo que viste en cada posición",
+  "digitos_individuales": "d1,d2,d3,d4 | d5,d6,d7,d8",
   "nota": "qué viste exactamente en la ventanilla"
 }`,
 
-  luz: `Analiza esta imagen de un medidor de energía eléctrica domiciliario.
-
-Tu única tarea: leer los dígitos del display del medidor (tambores o LCD).
+  luz: `Analiza esta imagen de un medidor de electricidad. Lee el display (mecánico o LCD).
 Ignora número de serie, stickers y texto de marca.
 
-Método:
-1. Identifica el tipo de display (mecánico o digital)
-2. Lee cada dígito individualmente de derecha a izquierda
-3. Si es mecánico y un tambor está entre dos dígitos, toma el inferior
-4. Junta todo de izquierda a derecha
+Pasos obligatorios:
+1. Identifica tipo: mecánico (tambores) o LCD (pantalla digital)
+2. Cuenta las posiciones (deben ser 8: 5 enteros + 3 decimales)
+3. Lee cada posición de izquierda a derecha y anótala en "digitos_individuales"
+4. Si es mecánico y tambor entre dos dígitos → toma el inferior
+5. Revisa posibles confusiones: 0↔6, 1↔7, 3↔8, 5↔6
+6. Formato final: NNNNN.NNN
 
 Responde ÚNICAMENTE con JSON:
 {
-  "lectura": "XXXXXX o null si ilegible",
+  "lectura": "NNNNN.NNN o null si ilegible",
   "confianza": "alta | baja",
-  "digitos_individuales": "lista de lo que viste",
-  "nota": "qué viste exactamente"
+  "digitos_individuales": "d1,d2,d3,d4,d5 | d6,d7,d8",
+  "nota": "tipo de display y qué viste en cada posición"
 }`,
 };
 
@@ -239,7 +262,6 @@ async function analizarMedidor(imagePath, tipo, { modo = 'rapido' } = {}) {
     };
   }
 
-  // Preprocessing
   let processedPath = null;
   let workingBuffer = imageBuffer;
   try {
@@ -254,20 +276,32 @@ async function analizarMedidor(imagePath, tipo, { modo = 'rapido' } = {}) {
   const prompt    = PROMPTS_COT[tipo] || PROMPTS_COT.luz;
 
   try {
-    // ── Primera llamada ──────────────────────────────────────
     const json1   = await llamarModelo(workingBuffer, mediaType, prompt);
     const result1 = parsearResultado(json1);
 
-    // ── Segunda llamada (solo modo preciso y si hay incertidumbre) ──
-    if (modo === 'preciso' && (result1.confianza === 'baja' || result1.calidad_foto !== 'buena')) {
+    // Segunda pasada siempre que haya incertidumbre (modo preciso)
+    // o cuando la primera pasada tiene baja confianza/calidad (modo rapido)
+    const necesitaVerificacion = modo === 'preciso'
+      || result1.confianza === 'baja'
+      || result1.calidad_foto !== 'buena'
+      || result1.es_medidor === false;
+
+    if (necesitaVerificacion) {
       try {
         const prompt2  = PROMPTS_VERIFICACION[tipo] || PROMPTS_VERIFICACION.luz;
         const json2    = await llamarModelo(workingBuffer, mediaType, prompt2);
         const result2  = parsearResultado(json2);
 
+        // Si la primera dijo no-medidor pero la segunda sí → confiar en la segunda
+        if (result1.es_medidor === false && result2.es_medidor !== false) {
+          return {
+            ...result2,
+            nota: `[Verificado medidor] ${result2.nota}`,
+          };
+        }
+
         if (result1.lectura && result2.lectura) {
           if (result1.lectura === result2.lectura) {
-            // Consenso → confirmar con alta confianza
             return {
               ...result1,
               confianza:         'alta',
@@ -275,7 +309,7 @@ async function analizarMedidor(imagePath, tipo, { modo = 'rapido' } = {}) {
               nota:              `[Verificado] ${result1.nota}`,
             };
           } else {
-            // Discrepancia entre pasadas → flag con ambas lecturas para admin
+            // Discrepancia entre pasadas → reportar ambas para revisión admin
             return {
               ...result1,
               confianza:         'baja',
@@ -285,7 +319,6 @@ async function analizarMedidor(imagePath, tipo, { modo = 'rapido' } = {}) {
           }
         }
 
-        // Si la segunda logró leer y la primera no → usar segunda
         if (!result1.lectura && result2.lectura) {
           return {
             ...result2,
