@@ -14,6 +14,8 @@ function tipoAlerta(a) {
   if (a.sin_acceso)       return 'sin_acceso';     // Auditor no pudo acceder al medidor
   if (a.es_medidor === 0) return 'no_es_medidor';  // La IA detectó que la foto no es un medidor
   if (!a.lectura_ocr)     return 'sin_deteccion';  // OCR no encontró ningún número
+  if (a.lectura_ocr && a.lectura_confirmada && a.lectura_ocr !== a.lectura_confirmada)
+                          return 'discrepancia';   // Auditor corrigió la lectura de la IA
   return 'baja_confianza';                         // OCR lo leyó pero con baja confianza
 }
 
@@ -91,11 +93,12 @@ export default function AdminAlerts() {
 
       <div className={styles.list}>
         {alerts.map(a => {
-          const meta        = TIPO_META[a.tipo];
-          const tipo        = tipoAlerta(a);
-          const sinDet      = tipo === 'sin_deteccion';
-          const sinAcceso   = tipo === 'sin_acceso';
-          const noEsMedidor = tipo === 'no_es_medidor';
+          const meta          = TIPO_META[a.tipo];
+          const tipo          = tipoAlerta(a);
+          const sinDet        = tipo === 'sin_deteccion';
+          const sinAcceso     = tipo === 'sin_acceso';
+          const noEsMedidor   = tipo === 'no_es_medidor';
+          const discrepancia  = tipo === 'discrepancia';
           const isEditing   = editing === a.medidor_id;
           const isRejecting = rejecting?.medidor_id === a.medidor_id;
 
@@ -113,9 +116,11 @@ export default function AdminAlerts() {
                     ? <span className={styles.badgeSinDeteccion}>🚫 No es medidor</span>
                     : sinDet
                       ? <span className={styles.badgeSinDeteccion}>📸 Sin detección</span>
-                      : <span className={`${styles.confianza} ${styles[a.confianza_ocr]}`}>
-                          {a.confianza_ocr?.toUpperCase()}
-                        </span>
+                      : discrepancia
+                        ? <span className={styles.badgeDiscrepancia}>⚠️ Discrepancia</span>
+                        : <span className={`${styles.confianza} ${styles[a.confianza_ocr]}`}>
+                            {a.confianza_ocr?.toUpperCase()}
+                          </span>
                 }
               </div>
 
@@ -189,15 +194,23 @@ export default function AdminAlerts() {
               )}
 
               {/* ── Caso B: Lectura con baja confianza / discrepancia ── */}
-              {!sinDet && (
+              {!sinDet && !sinAcceso && !noEsMedidor && (
                 <div className={styles.readings}>
+                  {a.lectura_ocr && a.lectura_confirmada && a.lectura_ocr !== a.lectura_confirmada && (
+                    <div className={styles.discrepanciaAlert}>
+                      ⚠️ <strong>Discrepancia:</strong> el auditor registró un valor diferente al detectado por la IA.
+                      Verifica la foto para confirmar cuál es el valor correcto.
+                    </div>
+                  )}
                   <div>
-                    <strong>OCR detectó:</strong>{' '}
+                    <strong>IA detectó:</strong>{' '}
                     <code>{a.lectura_ocr ?? '–'}</code>
                   </div>
                   <div>
-                    <strong>Confirmado por auditor:</strong>{' '}
-                    <code>{a.lectura_confirmada ?? '–'}</code>
+                    <strong>Auditor registró:</strong>{' '}
+                    <code className={a.lectura_ocr && a.lectura_confirmada && a.lectura_ocr !== a.lectura_confirmada ? styles.discrepanciaVal : ''}>
+                      {a.lectura_confirmada ?? '–'}
+                    </code>
                   </div>
                   {a.nota_ocr && (
                     <div className={styles.nota}>💬 {a.nota_ocr}</div>
@@ -305,6 +318,38 @@ export default function AdminAlerts() {
                         onClick={() => { setEditing(a.medidor_id); setNewVal(''); }}
                       >
                         📝 Ingresar lectura manualmente
+                      </button>
+                      <button
+                        className={styles.btnRechazar}
+                        onClick={() => setRejecting({
+                          visita_id:  a.visita_id,
+                          tipo:       a.tipo,
+                          medidor_id: a.medidor_id,
+                        })}
+                      >
+                        ↩ Rechazar visita
+                      </button>
+                    </>
+                  ) : discrepancia ? (
+                    /* Discrepancia: confirmar valor del auditor, corregir, o rechazar */
+                    <>
+                      <button
+                        className={styles.btnAprobarLectura}
+                        onClick={async () => {
+                          await api.patch(`/admin/medidores/${a.medidor_id}`, { lectura_confirmada: a.lectura_confirmada });
+                          load();
+                        }}
+                      >
+                        ✓ Confirmar valor del auditor ({a.lectura_confirmada})
+                      </button>
+                      <button
+                        className={styles.reviewBtn}
+                        onClick={() => {
+                          setEditing(a.medidor_id);
+                          setNewVal(a.lectura_confirmada || a.lectura_ocr || '');
+                        }}
+                      >
+                        ✏️ Corregir lectura
                       </button>
                       <button
                         className={styles.btnRechazar}

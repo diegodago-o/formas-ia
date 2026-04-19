@@ -211,6 +211,16 @@
 
 .actions { display: flex; gap: 12px; flex-wrap: wrap; }
 
+.alertasBloqueo {
+  background: #FFFBEB;
+  border: 1.5px solid #F59E0B;
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  font-size: 0.88rem;
+  color: #92400E;
+  line-height: 1.5;
+}
+
 .btnAprobar {
   background: var(--success);
   color: #fff;

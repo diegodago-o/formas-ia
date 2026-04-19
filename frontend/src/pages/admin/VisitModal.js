@@ -61,6 +61,7 @@ export default function VisitModal({ visitId, onClose, onUpdated }) {
   };
 
   const canEdit = !visit || !['aprobada', 'rechazada', 'anulada'].includes(visit.estado);
+  const alertasPendientes = visit?.medidores?.filter(m => m.requiere_revision === 1) ?? [];
 
   return (
     <>
@@ -230,7 +231,13 @@ export default function VisitModal({ visitId, onClose, onUpdated }) {
                 )}
 
                 {/* Acciones — solo si está pendiente */}
-                {canEdit && !action && (
+                {canEdit && !action && alertasPendientes.length > 0 && (
+                  <div className={styles.alertasBloqueo}>
+                    ⚠️ Esta visita tiene <strong>{alertasPendientes.length} hallazgo{alertasPendientes.length !== 1 ? 's' : ''} OCR pendiente{alertasPendientes.length !== 1 ? 's' : ''}</strong>.
+                    Resuélvelos en <strong>Alertas OCR</strong> antes de aprobar o rechazar.
+                  </div>
+                )}
+                {canEdit && !action && alertasPendientes.length === 0 && (
                   <div className={styles.actions}>
                     <button className={styles.btnAprobar} onClick={() => handleEstado('aprobada')} disabled={saving}>
                       ✓ Aprobar visita
