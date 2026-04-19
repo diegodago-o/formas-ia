@@ -279,12 +279,11 @@ async function analizarMedidor(imagePath, tipo, { modo = 'rapido' } = {}) {
     const json1   = await llamarModelo(workingBuffer, mediaType, prompt);
     const result1 = parsearResultado(json1);
 
-    // Segunda pasada siempre que haya incertidumbre (modo preciso)
-    // o cuando la primera pasada tiene baja confianza/calidad (modo rapido)
-    const necesitaVerificacion = modo === 'preciso'
-      || result1.confianza === 'baja'
+    // Segunda pasada solo cuando la primera es genuinamente incierta
+    const necesitaVerificacion = result1.confianza === 'baja'
       || result1.calidad_foto !== 'buena'
-      || result1.es_medidor === false;
+      || result1.es_medidor === false
+      || result1.lectura === null;
 
     if (necesitaVerificacion) {
       try {
@@ -292,16 +291,14 @@ async function analizarMedidor(imagePath, tipo, { modo = 'rapido' } = {}) {
         const json2    = await llamarModelo(workingBuffer, mediaType, prompt2);
         const result2  = parsearResultado(json2);
 
-        // Si la primera dijo no-medidor pero la segunda sí → confiar en la segunda
+        // Primera dijo no-medidor pero la segunda sí → confiar en la segunda
         if (result1.es_medidor === false && result2.es_medidor !== false) {
-          return {
-            ...result2,
-            nota: `[Verificado medidor] ${result2.nota}`,
-          };
+          return { ...result2, nota: `[Verificado medidor] ${result2.nota}` };
         }
 
         if (result1.lectura && result2.lectura) {
           if (result1.lectura === result2.lectura) {
+            // Consenso → confirmar con alta confianza
             return {
               ...result1,
               confianza:         'alta',
@@ -309,21 +306,26 @@ async function analizarMedidor(imagePath, tipo, { modo = 'rapido' } = {}) {
               nota:              `[Verificado] ${result1.nota}`,
             };
           } else {
-            // Discrepancia entre pasadas → reportar ambas para revisión admin
+            // Discrepan: si la primera tenía alta confianza → confiar en ella
+            // Si ambas eran inciertas → flag para admin
+            if (result1.confianza === 'alta') {
+              return {
+                ...result1,
+                nota: `[Confirmado 1ª pasada] ${result1.nota}`,
+              };
+            }
             return {
               ...result1,
               confianza:         'baja',
               requiere_revision: true,
-              nota:              `[IA inconsistente] Pasada 1: ${result1.lectura} · Pasada 2: ${result2.lectura}. Requiere verificación manual.`,
+              nota:              `[Ambiguo] Pasada 1: ${result1.lectura} · Pasada 2: ${result2.lectura}. Verifica la foto.`,
             };
           }
         }
 
+        // Primera no leyó, segunda sí → usar segunda
         if (!result1.lectura && result2.lectura) {
-          return {
-            ...result2,
-            nota: `[Recuperado en 2ª pasada] ${result2.nota}`,
-          };
+          return { ...result2, nota: `[Recuperado en 2ª pasada] ${result2.nota}` };
         }
       } catch (err2) {
         logger.warn(`OCR segunda pasada falló: ${err2.message}`);

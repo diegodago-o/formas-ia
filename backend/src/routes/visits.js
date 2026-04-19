@@ -70,7 +70,8 @@ async function runOcrForMedidor(medidorId, absoluteFotoPath, tipo, lecturaAudito
     const lecturaAuditorNorm = lecturaAuditor ? lecturaAuditor.replace(',', '.') : lecturaAuditor;
     const flagDiscrep    = !!(result.lectura && lecturaAuditorNorm && result.lectura !== lecturaAuditorNorm);
     const flagSinLectura = !result.lectura && !lecturaAuditor && !flagAcceso;
-    const flagConfianza  = result.confianza === 'baja';
+    // Baja confianza solo es hallazgo si además no coincide con el auditor
+    const flagConfianza  = result.confianza === 'baja' && flagDiscrep;
 
     const requiereRevision = (
       flagDelta || flagAcceso || flagCalidad || flagNoMedidor ||
