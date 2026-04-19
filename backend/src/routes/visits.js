@@ -67,7 +67,8 @@ async function runOcrForMedidor(medidorId, absoluteFotoPath, tipo, lecturaAudito
     const flagAcceso     = !!sin_acceso;
     const flagCalidad    = result.calidad_foto === 'mala';
     const flagNoMedidor  = result.es_medidor === false;
-    const flagDiscrep    = !!(result.lectura && lecturaAuditor && result.lectura !== lecturaAuditor);
+    const lecturaAuditorNorm = lecturaAuditor ? lecturaAuditor.replace(',', '.') : lecturaAuditor;
+    const flagDiscrep    = !!(result.lectura && lecturaAuditorNorm && result.lectura !== lecturaAuditorNorm);
     const flagSinLectura = !result.lectura && !lecturaAuditor && !flagAcceso;
     const flagConfianza  = result.confianza === 'baja';
 
@@ -138,7 +139,9 @@ router.post('/', authMiddleware, ah(async (req, res) => {
       const m = medidoresBody[tipo];
       if (!m) continue;
 
-      const { foto_path, lectura, sin_acceso, motivo_sin_acceso } = m;
+      const { foto_path, sin_acceso, motivo_sin_acceso } = m;
+      // Normalizar separador decimal: coma → punto (teclado móvil)
+      const lectura = m.lectura ? m.lectura.replace(',', '.') : m.lectura;
 
       if (!foto_path && !lectura && !sin_acceso) continue;
 
