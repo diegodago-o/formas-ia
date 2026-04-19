@@ -40,7 +40,7 @@ router.get('/conjuntos', authMiddleware, ah(async (req, res) => {
   const where = ciudad_id ? 'WHERE c.ciudad_id = ? AND c.activo = 1' : 'WHERE c.activo = 1';
   const params = ciudad_id ? [ciudad_id] : [];
   const [rows] = await pool.query(
-    `SELECT c.id, c.nombre, c.direccion, ci.nombre AS ciudad
+    `SELECT c.id, c.nombre, c.ciudad_id, c.direccion, ci.nombre AS ciudad
      FROM conjuntos c JOIN ciudades ci ON ci.id = c.ciudad_id ${where} ORDER BY c.nombre`,
     params
   );
