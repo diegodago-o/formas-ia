@@ -65,7 +65,8 @@ function parsearResultado(json) {
     lectura,
     confianza,
     calidad_foto:      calidad,
-    motivo_calidad:    json.motivo_calidad || null,
+    motivo_calidad:    (json.motivo_calidad && !json.motivo_calidad.toLowerCase().includes('omitir'))
+                         ? json.motivo_calidad : null,
     nota:              json.nota ?? '',
     requiere_revision: !esMedidor || lectura === null || calidad === 'mala' || confianza === 'baja',
   };
@@ -90,15 +91,15 @@ EJEMPLO: 5 tambores negros "00201" y 1 rojo "2" → lectura "00201.2"
 
 CONFIANZA: "alta" si todos los dígitos son claros. "baja" si 2 o más son inciertos.
 CALIDAD: "buena" / "aceptable" (algo de reflejo) / "mala" (ilegible o muy oscuro).
-"es_medidor": false SOLO si la imagen claramente NO es un medidor de gas (mueble, pared, etc.)
+Si calidad es "aceptable" o "mala", agrega el campo "motivo_calidad" con una frase corta. Si es "buena", NO incluyas ese campo.
+"es_medidor": false SOLO si la imagen claramente NO contiene ningún medidor de servicios (mueble, pared, persona, etc.). Un medidor de cualquier tipo (gas, agua, luz) cuenta como true.
 
-Responde SOLO con este JSON:
+Responde SOLO con este JSON (sin texto adicional):
 {
   "es_medidor": true,
   "lectura": "00201.2",
   "confianza": "alta",
   "calidad_foto": "buena",
-  "motivo_calidad": "omitir si es buena",
   "nota": "una oración describiendo los dígitos que viste en la ventanilla"
 }`,
 
@@ -118,15 +119,15 @@ EJEMPLO: tambores negros "01348" y rojos "42" → lectura "01348.42"
 
 CONFIANZA: "alta" si todos los dígitos son claros. "baja" si 2 o más son inciertos.
 CALIDAD: "buena" / "aceptable" / "mala".
-"es_medidor": false SOLO si la imagen claramente NO es un medidor de agua.
+Si calidad es "aceptable" o "mala", agrega el campo "motivo_calidad" con una frase corta. Si es "buena", NO incluyas ese campo.
+"es_medidor": false SOLO si la imagen claramente NO contiene ningún medidor de servicios (mueble, pared, persona, etc.). Un medidor de cualquier tipo cuenta como true.
 
-Responde SOLO con este JSON:
+Responde SOLO con este JSON (sin texto adicional):
 {
   "es_medidor": true,
   "lectura": "01348.42",
   "confianza": "alta",
   "calidad_foto": "buena",
-  "motivo_calidad": "omitir si es buena",
   "nota": "una oración describiendo los dígitos que viste en la ventanilla (no el número de serie)"
 }`,
 
@@ -145,15 +146,15 @@ EJEMPLO mecánico: "0045" negro y "21" rojo → lectura "0045.21"
 
 CONFIANZA: "alta" si todos los dígitos son claros. "baja" si 2 o más son inciertos.
 CALIDAD: "buena" / "aceptable" / "mala".
-"es_medidor": false SOLO si la imagen claramente NO es un medidor eléctrico.
+Si calidad es "aceptable" o "mala", agrega el campo "motivo_calidad" con una frase corta. Si es "buena", NO incluyas ese campo.
+"es_medidor": false SOLO si la imagen claramente NO contiene ningún medidor de servicios (mueble, pared, persona, etc.). Un medidor de cualquier tipo cuenta como true.
 
-Responde SOLO con este JSON:
+Responde SOLO con este JSON (sin texto adicional):
 {
   "es_medidor": true,
   "lectura": "004521",
   "confianza": "alta",
   "calidad_foto": "buena",
-  "motivo_calidad": "omitir si es buena",
   "nota": "una oración describiendo qué viste (tipo display y dígitos)"
 }`,
 };
