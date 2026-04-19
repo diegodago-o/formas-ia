@@ -154,3 +154,44 @@
 }
 
 .empty { font-size: 0.82rem; color: var(--text-muted); padding: 6px 4px; font-style: italic; }
+
+.flashError {
+  background: #FEE2E2; color: #991B1B;
+  border-radius: var(--radius-sm); padding: 10px 14px;
+  font-size: 0.88rem;
+}
+
+/* Botón eliminar (rojo pequeño) */
+.btnDel {
+  background: transparent; color: #FCA5A5;
+  font-size: 0.9rem; padding: 4px 6px;
+  border-radius: 4px; flex-shrink: 0;
+  transition: color 0.15s;
+}
+.btnDel:hover { color: #DC2626; }
+
+.btnDelTorre {
+  background: transparent; color: #FCA5A5;
+  font-size: 0.82rem; padding: 2px 5px;
+  border-radius: 4px; margin-left: auto;
+  transition: color 0.15s;
+}
+.btnDelTorre:hover { color: #DC2626; }
+
+/* Torres inline en form de conjunto */
+.torresSection {
+  display: flex; flex-direction: column; gap: 6px;
+  border-top: 1px dashed var(--border); padding-top: 10px; margin-top: 4px;
+}
+.torresSectionLabel { font-size: 0.8rem; color: var(--text-muted); font-weight: 600; }
+.torreInputRow { display: flex; gap: 6px; align-items: center; }
+.torreInputRow input { flex: 1; }
+.btnRemoveTorre {
+  background: transparent; color: #FCA5A5; font-size: 0.9rem;
+  padding: 4px 7px; border-radius: 4px;
+}
+.btnRemoveTorre:hover { color: #DC2626; }
+.btnAddTorreField {
+  align-self: flex-start; font-size: 0.82rem; color: var(--primary);
+  background: transparent; padding: 4px 0; font-weight: 600;
+}
