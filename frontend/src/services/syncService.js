@@ -67,6 +67,7 @@ export async function syncPendingVisits(onProgress) {
                 uploadedOcr.lectura &&
                 m.lectura &&
                 uploadedOcr.lectura !== m.lectura;
+              const noEsMedidor = uploadedOcr.es_medidor === false;
 
               medidoresResueltos[tipo] = {
                 foto_path:         uploadedOcr.foto_path,
@@ -76,9 +77,10 @@ export async function syncPendingVisits(onProgress) {
                 calidad_foto:      uploadedOcr.calidad_foto,
                 motivo_calidad:    uploadedOcr.motivo_calidad,
                 nota_ocr:          uploadedOcr.nota,
+                es_medidor:        uploadedOcr.es_medidor,
                 sin_acceso:        m.sin_acceso || false,
                 motivo_sin_acceso: m.motivo_sin_acceso || null,
-                requiere_revision: !m.lectura || uploadedOcr.calidad_foto === 'mala' || discrepancia,
+                requiere_revision: noEsMedidor || !m.lectura || uploadedOcr.calidad_foto === 'mala' || discrepancia,
               };
             } else {
               // Foto no subible — guardar lectura manual si existe

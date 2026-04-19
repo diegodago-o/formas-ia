@@ -177,11 +177,14 @@ export default function NewVisit() {
         const restored = {};
         for (const tipo of ['luz', 'agua', 'gas']) {
           const m = draft.medidores[tipo] || { ...EMPTY_MEDIDOR };
-          restored[tipo] = {
-            ...m,
-            // blob: URL no persiste entre sesiones — recrear desde el archivo
-            preview: m.foto_file ? URL.createObjectURL(m.foto_file) : null,
-          };
+          // Prioridad: URL del servidor (online) > blob desde foto_file (offline)
+          let preview = null;
+          if (m.foto_path) {
+            preview = `/uploads/${m.foto_path}`;
+          } else if (m.foto_file) {
+            preview = URL.createObjectURL(m.foto_file);
+          }
+          restored[tipo] = { ...m, preview };
         }
         setMedidores(restored);
       }
@@ -343,16 +346,15 @@ export default function NewVisit() {
   };
 
   // ── Guardar progreso y salir (vuelve a Mis Visitas) ───────────────
-  const handleSaveDraft = () => {
-    // El auto-guardado ya escribió el estado actual en IndexedDB.
-    // Si por alguna razón el timer no disparó aún, forzar guardado:
+  const handleSaveDraft = async () => {
     clearTimeout(autoSaveTimer.current);
     if (currentDraftId) {
       const medidoresForSave = {};
       for (const tipo of ['luz', 'agua', 'gas']) {
         medidoresForSave[tipo] = { ...medidores[tipo], preview: null };
       }
-      updateDraft(currentDraftId, {
+      // Await para que IDB termine de escribir antes de navegar
+      await updateDraft(currentDraftId, {
         ciudadId, conjuntoId, torreId, apartamento,
         latitud, longitud, gpsMode,
         observaciones,
