@@ -627,9 +627,9 @@ export default function NewVisit() {
           </div>
 
           {online
-            ? <p className={styles.hint}>Toma la foto de cada medidor e ingresa la lectura. La IA verificará los datos al guardar.</p>
+            ? <p className={styles.hint}>Toma la foto de cada medidor e ingresa la lectura.</p>
             : <p className={`${styles.hint} ${styles.hintOffline}`}>
-                📵 Sin conexión — ingresa las lecturas manualmente. La IA analizará las fotos al sincronizar.
+                📵 Sin conexión — ingresa las lecturas manualmente. Las fotos se sincronizarán al recuperar señal.
               </p>
           }
 
