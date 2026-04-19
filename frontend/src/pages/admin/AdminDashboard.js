@@ -3,14 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import api from '../../services/api';
 import styles from './AdminDashboard.module.css';
 
-async function downloadExcel() {
-  const resp = await api.get('/reports/excel', { responseType: 'blob' });
-  const url  = URL.createObjectURL(resp.data);
-  const a    = document.createElement('a');
-  a.href = url; a.download = `lectura-ia-${Date.now()}.xlsx`; a.click();
-  URL.revokeObjectURL(url);
-}
-
 const ESTADO_META = {
   pendiente: { label: 'Pendientes',  icon: '⏳', color: '#F59E0B', bg: '#FEF3C7' },
   aprobada:  { label: 'Aprobadas',   icon: '✅', color: '#10B981', bg: '#D1FAE5' },
@@ -96,13 +88,6 @@ export default function AdminDashboard() {
         )}
       </div>
 
-      {/* ── Accesos rápidos ───────────────────────────── */}
-      <div className={styles.sectionTitle}>Accesos rápidos</div>
-      <div className={styles.links}>
-        <button onClick={() => navigate('/admin/catalogos')}>🏢 Gestionar catálogos</button>
-        <button onClick={() => navigate('/admin/usuarios')}>👥 Gestionar usuarios</button>
-        <button onClick={downloadExcel}>📥 Descargar reporte Excel</button>
-      </div>
     </div>
   );
 }
