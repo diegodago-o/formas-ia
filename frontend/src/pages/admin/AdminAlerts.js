@@ -11,15 +11,17 @@ const TIPO_META = {
 
 // Determina el tipo de alerta para bifurcar el flujo
 function tipoAlerta(a) {
-  if (a.sin_acceso) return 'sin_acceso';         // Auditor no pudo acceder al medidor
-  if (!a.lectura_ocr) return 'sin_deteccion';    // OCR no encontró ningún número
-  return 'baja_confianza';                        // OCR lo leyó pero con baja confianza / diferencia
+  if (a.sin_acceso)       return 'sin_acceso';     // Auditor no pudo acceder al medidor
+  if (a.es_medidor === 0) return 'no_es_medidor';  // La IA detectó que la foto no es un medidor
+  if (!a.lectura_ocr)     return 'sin_deteccion';  // OCR no encontró ningún número
+  return 'baja_confianza';                         // OCR lo leyó pero con baja confianza
 }
 
 export default function AdminAlerts() {
   const [alerts, setAlerts]       = useState([]);
   const [loading, setLoading]     = useState(true);
   const [viewVisitId, setViewVisitId] = useState(null);
+  const [lightbox, setLightbox]   = useState(null); // src de la foto ampliada
 
   // Estado para "ingresar lectura manual"
   const [editing, setEditing]   = useState(null); // medidor_id
@@ -93,24 +95,27 @@ export default function AdminAlerts() {
           const tipo        = tipoAlerta(a);
           const sinDet      = tipo === 'sin_deteccion';
           const sinAcceso   = tipo === 'sin_acceso';
+          const noEsMedidor = tipo === 'no_es_medidor';
           const isEditing   = editing === a.medidor_id;
           const isRejecting = rejecting?.medidor_id === a.medidor_id;
 
           return (
             <div
               key={a.medidor_id}
-              className={`${styles.card} ${sinDet ? styles.cardSinDeteccion : ''} ${sinAcceso ? styles.cardSinAcceso : ''}`}
+              className={`${styles.card} ${(sinDet || noEsMedidor) ? styles.cardSinDeteccion : ''} ${sinAcceso ? styles.cardSinAcceso : ''}`}
             >
               {/* Cabecera */}
               <div className={styles.cardHeader}>
                 <span className={styles.tipo}>{meta.emoji} Medidor de {meta.label}</span>
                 {sinAcceso
                   ? <span className={styles.badgeSinAcceso}>🚫 Sin acceso</span>
-                  : sinDet
-                    ? <span className={styles.badgeSinDeteccion}>📸 Sin detección</span>
-                    : <span className={`${styles.confianza} ${styles[a.confianza_ocr]}`}>
-                        {a.confianza_ocr?.toUpperCase()}
-                      </span>
+                  : noEsMedidor
+                    ? <span className={styles.badgeSinDeteccion}>🚫 No es medidor</span>
+                    : sinDet
+                      ? <span className={styles.badgeSinDeteccion}>📸 Sin detección</span>
+                      : <span className={`${styles.confianza} ${styles[a.confianza_ocr]}`}>
+                          {a.confianza_ocr?.toUpperCase()}
+                        </span>
                 }
               </div>
 
@@ -127,13 +132,12 @@ export default function AdminAlerts() {
 
               {/* Foto */}
               {a.foto_path && (
-                <a href={`/uploads/${a.foto_path}`} target="_blank" rel="noreferrer">
-                  <img
-                    src={`/uploads/${a.foto_path}`}
-                    alt="Foto medidor"
-                    className={styles.foto}
-                  />
-                </a>
+                <img
+                  src={`/uploads/${a.foto_path}`}
+                  alt="Foto medidor"
+                  className={styles.foto}
+                  onClick={() => setLightbox(`/uploads/${a.foto_path}`)}
+                />
               )}
 
               {/* ── Caso A: Sin acceso al medidor ── */}
@@ -151,19 +155,35 @@ export default function AdminAlerts() {
                 </div>
               )}
 
-              {/* ── Caso B: Sin detección — foto no es un medidor ── */}
-              {sinDet && (
+              {/* ── Caso: Foto no es un medidor ── */}
+              {noEsMedidor && (
                 <div className={styles.sinDeteccionBox}>
                   <div className={styles.sinDeteccionTitle}>
-                    ⚠️ La IA no encontró un medidor en esta foto
+                    🚫 La IA detectó que esta foto no corresponde a un medidor
                   </div>
                   {a.nota_ocr && (
                     <div className={styles.sinDeteccionNota}>💬 {a.nota_ocr}</div>
                   )}
                   <div className={styles.sinDeteccionDesc}>
-                    El auditor fue alertado y decidió continuar con esta foto. Puedes ingresar
-                    la lectura si la conoces por otro medio, o rechazar la visita para que el
-                    auditor vuelva a registrar este medidor.
+                    El auditor registró la visita offline sin poder verificar la foto con IA.
+                    Puedes aprobar si el contexto lo justifica, o rechazar para que el auditor
+                    vuelva a registrar este medidor correctamente.
+                  </div>
+                </div>
+              )}
+
+              {/* ── Caso: Sin detección (medidor borroso / ilegible) ── */}
+              {sinDet && (
+                <div className={styles.sinDeteccionBox}>
+                  <div className={styles.sinDeteccionTitle}>
+                    ⚠️ La IA no pudo leer el número del medidor
+                  </div>
+                  {a.nota_ocr && (
+                    <div className={styles.sinDeteccionNota}>💬 {a.nota_ocr}</div>
+                  )}
+                  <div className={styles.sinDeteccionDesc}>
+                    El medidor es visible pero el display no pudo ser leído. Puedes ingresar
+                    la lectura si la conoces, o rechazar la visita para que el auditor retome la foto.
                   </div>
                 </div>
               )}
@@ -254,8 +274,8 @@ export default function AdminAlerts() {
               {/* Botones iniciales (sin formulario abierto) */}
               {!isEditing && !isRejecting && (
                 <div className={styles.actionRow}>
-                  {sinAcceso ? (
-                    /* Sin acceso: aprobar o rechazar */
+                  {(sinAcceso || noEsMedidor) ? (
+                    /* Sin acceso / No es medidor: solo aprobar o rechazar */
                     <>
                       <button
                         className={styles.btnAprobar}
@@ -278,7 +298,7 @@ export default function AdminAlerts() {
                       </button>
                     </>
                   ) : sinDet ? (
-                    /* Foto incorrecta: ingresar lectura o rechazar */
+                    /* Medidor ilegible: ingresar lectura o rechazar */
                     <>
                       <button
                         className={styles.btnManual}
@@ -322,6 +342,14 @@ export default function AdminAlerts() {
           onClose={() => setViewVisitId(null)}
           onUpdated={() => { setViewVisitId(null); load(); }}
         />
+      )}
+
+      {/* Lightbox */}
+      {lightbox && (
+        <div className={styles.lightboxOverlay} onClick={() => setLightbox(null)}>
+          <img src={lightbox} alt="Foto ampliada" className={styles.lightboxImg} />
+          <button className={styles.lightboxClose} onClick={() => setLightbox(null)}>✕</button>
+        </div>
       )}
     </div>
   );

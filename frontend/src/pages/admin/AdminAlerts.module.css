@@ -257,6 +257,31 @@
 }
 .btnAprobar:hover { background: #A7F3D0; }
 
+/* ── Lightbox ─────────────────────────────────────────────────── */
+.lightboxOverlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.88);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 1000;
+  cursor: zoom-out;
+}
+.lightboxImg {
+  max-width: 95vw;
+  max-height: 92vh;
+  object-fit: contain;
+  border-radius: 6px;
+}
+.lightboxClose {
+  position: absolute; top: 16px; right: 20px;
+  background: rgba(255,255,255,0.15);
+  color: #fff; font-size: 1.4rem;
+  width: 40px; height: 40px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  transition: background 0.15s;
+}
+.lightboxClose:hover { background: rgba(255,255,255,0.3); }
+
 /* Botón: ver visita */
 .btnVerVisita {
   align-self: flex-start;

@@ -141,7 +141,7 @@ router.get('/alerts', ...isAdmin, ah(async (req, res) => {
             m.lectura_ocr, m.confianza_ocr, m.nota_ocr,
             m.lectura_manual, m.lectura_confirmada,
             m.calidad_foto, m.motivo_calidad,
-            m.sin_acceso, m.motivo_sin_acceso,
+            m.sin_acceso, m.motivo_sin_acceso, m.es_medidor,
             v.id AS visita_id, v.fecha, v.apartamento,
             ci.nombre AS ciudad, c.nombre AS conjunto, t.nombre AS torre,
             u.nombre AS auditor

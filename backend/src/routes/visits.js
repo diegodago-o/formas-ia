@@ -99,6 +99,7 @@ router.post('/', authMiddleware, ah(async (req, res) => {
         foto_path, lectura,
         lectura_ocr, confianza_ocr, calidad_foto, motivo_calidad, nota_ocr,
         sin_acceso, motivo_sin_acceso,
+        es_medidor,
       } = m;
 
       if (!foto_path && !lectura && !sin_acceso) continue;
@@ -149,14 +150,16 @@ router.post('/', authMiddleware, ah(async (req, res) => {
            lectura_ocr, confianza_ocr, calidad_foto, motivo_calidad, nota_ocr,
            lectura_confirmada, requiere_revision,
            sin_acceso, motivo_sin_acceso,
+           es_medidor,
            lectura_anterior, delta, primera_lectura)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           visitaId, tipo, foto_path || null,
           lectura_ocr || null, confianza_ocr || null,
           calidad_foto || 'buena', motivo_calidad || null, nota_ocr || null,
           lectura || null, requiereRevision,
           sin_acceso ? 1 : 0, motivo_sin_acceso || null,
+          es_medidor === false ? 0 : 1,
           lecturaAnterior, delta, primeraLectura ? 1 : 0,
         ]
       );
