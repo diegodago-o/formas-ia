@@ -466,13 +466,24 @@ export default function NewVisit() {
       }
 
       try {
+        // Enviar solo los campos que el servidor necesita — sin base64 ni File objects
+        const medidoresParaServidor = {};
+        for (const [tipo, m] of Object.entries(medidoresPayload)) {
+          if (!m) continue;
+          medidoresParaServidor[tipo] = {
+            foto_path:         m.foto_path         || null,
+            lectura:           m.lectura           || null,
+            sin_acceso:        m.sin_acceso        || false,
+            motivo_sin_acceso: m.motivo_sin_acceso || null,
+          };
+        }
         await api.post('/visits', {
           latitud, longitud,
           ciudad_id:   ciudadId,
           conjunto_id: conjuntoId,
           torre_id:    torreId || null,
           apartamento, observaciones,
-          medidores:   medidoresPayload,
+          medidores:   medidoresParaServidor,
           hora_inicio: horaInicioRef.current,
           hora_fin:    new Date().toISOString(),
         });
