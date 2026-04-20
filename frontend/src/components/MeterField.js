@@ -1,7 +1,10 @@
 import React, { useRef, useState } from 'react';
 import { compressImage } from '../services/compressImage';
+import { getOS } from '../services/installPrompt';
 import CameraCapture from './CameraCapture';
 import styles from './MeterField.module.css';
+
+const IS_IOS = getOS() === 'ios';
 
 const META = {
   luz:  { label: 'Medidor de Luz',  emoji: '⚡', color: '#F59E0B' },
@@ -153,11 +156,16 @@ export default function MeterField({ tipo, data, onChange, onFile, isOnline = tr
               }}
             />
           )}
-          <button className={styles.removeBtn} onClick={() => { remove(); setShowCamera(true); }}>✕ Cambiar foto</button>
+          <button className={styles.removeBtn} onClick={() => {
+            remove();
+            IS_IOS ? inputRef.current?.click() : setShowCamera(true);
+          }}>✕ Cambiar foto</button>
         </div>
       ) : (
         <div className={styles.captureRow}>
-          <button className={styles.photoBtn} onClick={() => setShowCamera(true)}>
+          <button className={styles.photoBtn} onClick={() => {
+            IS_IOS ? inputRef.current?.click() : setShowCamera(true);
+          }}>
             <span>📷</span>
             <span>Tomar foto</span>
           </button>
