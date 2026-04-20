@@ -435,7 +435,7 @@ export default function AdminAlerts() {
                                 <>
                                   <button
                                     className={styles.btnConfirmar}
-                                    onClick={() => resolver(a.medidor_id, 'aprobado', a.lectura_confirmada)}
+                                    onClick={() => resolver(a.medidor_id, 'aprobado', a.lectura_confirmada || a.lectura_ocr)}
                                     disabled={saving}
                                   >
                                     ✓ Confirmar lectura
@@ -445,6 +445,13 @@ export default function AdminAlerts() {
                                     onClick={() => { setEditing(a.medidor_id); setNewVal(a.lectura_confirmada || a.lectura_ocr || ''); }}
                                   >
                                     ✏️ Corregir
+                                  </button>
+                                  <button
+                                    className={styles.btnRechazar}
+                                    onClick={() => resolver(a.medidor_id, 'rechazado')}
+                                    disabled={saving}
+                                  >
+                                    ✕ Rechazar
                                   </button>
                                 </>
                               )}
