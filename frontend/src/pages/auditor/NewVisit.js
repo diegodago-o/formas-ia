@@ -304,8 +304,16 @@ export default function NewVisit() {
     setMedidores(prev => ({ ...prev, [tipo]: { ...prev[tipo], foto_file: file, foto_base64: base64 } }));
   };
 
+  // Medidores con foto pero sin lectura confirmada (lectura obligatoria)
+  const medidoresSinLectura = ['luz', 'agua', 'gas'].filter(t => {
+    const m = medidores[t];
+    const tieneFoto = m.foto_file || m.foto_path || m.foto_base64 || m.preview;
+    return tieneFoto && !m.lectura && !m.sin_acceso;
+  });
+
   const canNext = () => {
     if (step === 0) return ciudadId && conjuntoId && apartamento.trim() && latitud;
+    if (step === 1) return medidoresSinLectura.length === 0;
     return true;
   };
 
@@ -698,12 +706,19 @@ export default function NewVisit() {
             </p>
           )}
 
+          {medidoresSinLectura.length > 0 && (
+            <div className={styles.lecturaRequeridaAlert}>
+              ⚠️ Debes ingresar la lectura en: <strong>{medidoresSinLectura.join(', ')}</strong>
+            </div>
+          )}
+
           {['luz', 'agua', 'gas'].map(tipo => (
             <MeterField
               key={tipo}
               tipo={tipo}
               data={medidores[tipo]}
               isOnline={online}
+              lecturaRequerida={medidoresSinLectura.includes(tipo)}
               onChange={(field, val) => updateMedidor(tipo, field, val)}
               onFile={file => handleMedidorFile(tipo, file)}
             />

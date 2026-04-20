@@ -89,6 +89,15 @@
   border-left: 3px solid var(--accent);
 }
 
+.lecturaRequeridaAlert {
+  font-size: 0.85rem;
+  color: #991B1B;
+  background: #FEF2F2;
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  border-left: 3px solid #EF4444;
+}
+
 .summary {
   background: var(--surface);
   border-radius: var(--radius);

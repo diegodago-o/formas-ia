@@ -18,7 +18,7 @@ const MOTIVOS_SIN_ACCESO = [
   'Otro',
 ];
 
-export default function MeterField({ tipo, data, onChange, onFile, isOnline = true }) {
+export default function MeterField({ tipo, data, onChange, onFile, isOnline = true, lecturaRequerida = false }) {
   const inputRef = useRef();
   const meta     = META[tipo];
 
@@ -205,8 +205,10 @@ export default function MeterField({ tipo, data, onChange, onFile, isOnline = tr
 
       {/* Lectura: input + botón Guardar */}
       {data.preview && !lecturaSaved && (
-        <div className={styles.editBox}>
-          <label className={styles.editLabel}>Ingresa la lectura del medidor:</label>
+        <div className={`${styles.editBox} ${lecturaRequerida ? styles.editBoxRequerida : ''}`}>
+          <label className={styles.editLabel}>
+            Ingresa la lectura del medidor:{lecturaRequerida && <span className={styles.requeridoBadge}> obligatoria</span>}
+          </label>
           <div className={styles.inputRow}>
             <input
               type="text"

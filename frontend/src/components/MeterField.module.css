@@ -281,7 +281,26 @@
   padding: 12px 14px;
   border: 1.5px solid #FCD34D;
 }
+.editBoxRequerida {
+  background: #FEF2F2;
+  border-color: #FCA5A5;
+  animation: pulse-border 1.5s ease-in-out 2;
+}
+@keyframes pulse-border {
+  0%, 100% { border-color: #FCA5A5; }
+  50%       { border-color: #EF4444; }
+}
 .editLabel { font-size: 0.82rem; font-weight: 600; color: #92400E; }
+.requeridoBadge {
+  background: #EF4444;
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 10px;
+  margin-left: 4px;
+  vertical-align: middle;
+}
 .inputRow { display: flex; gap: 8px; }
 .inputRow input {
   flex: 1;
