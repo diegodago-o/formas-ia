@@ -1,305 +1,494 @@
-.loading, .empty { text-align: center; padding: 48px; color: var(--text-muted); }
-.empty span { font-size: 3rem; display: block; margin-bottom: 12px; }
-.count { font-size: 0.88rem; color: var(--text-muted); margin-bottom: 16px; }
+/* ── Loading / Empty ─────────────────────────────────────────── */
+.loadingWrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 64px 24px;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+.spinner {
+  width: 32px; height: 32px;
+  border: 3px solid var(--border);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
 
-.list { display: flex; flex-direction: column; gap: 16px; }
+.emptyState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 72px 24px;
+  text-align: center;
+}
+.emptyIcon { font-size: 3.5rem; margin-bottom: 16px; }
+.emptyTitle { font-size: 1.2rem; font-weight: 700; color: var(--text); margin: 0 0 8px; }
+.emptyDesc  { font-size: 0.9rem; color: var(--text-muted); margin: 0; }
 
-/* ── Tarjeta base ─────────────────────────────────────────────── */
-.card {
+/* ── Page header ─────────────────────────────────────────────── */
+.page { display: flex; flex-direction: column; gap: 20px; }
+
+.pageHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.pageTitle {
+  font-size: 1.3rem;
+  font-weight: 800;
+  color: var(--text);
+  margin: 0 0 4px;
+}
+.pageSubtitle {
+  font-size: 0.83rem;
+  color: var(--text-muted);
+  margin: 0;
+}
+.pageStats {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+.statChip {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   background: var(--surface);
-  border-radius: var(--radius);
-  padding: 16px;
-  box-shadow: var(--shadow);
+  border: 1.5px solid var(--border);
+  border-radius: 12px;
+  padding: 8px 16px;
+  min-width: 64px;
+}
+.statChipAlert { border-color: #FCA5A5; background: #FEF2F2; }
+.statNum  { font-size: 1.4rem; font-weight: 800; line-height: 1; color: var(--text); }
+.statLabel { font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; margin-top: 2px; }
+.statChipAlert .statNum { color: #991B1B; }
+
+/* ── Lista ───────────────────────────────────────────────────── */
+.list { display: flex; flex-direction: column; gap: 14px; }
+
+/* ── Tarjeta de visita (acordeón) ───────────────────────────── */
+.visitCard {
+  background: var(--surface);
+  border-radius: 14px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.07), 0 4px 16px rgba(0,0,0,0.04);
+  border-left: 5px solid #D1D5DB;
+  overflow: hidden;
+}
+
+/* Colores de borde según severidad */
+.visita-roja    { border-left-color: #EF4444; }
+.visita-ambar   { border-left-color: #F59E0B; }
+.visita-morada  { border-left-color: #8B5CF6; }
+.visita-amarilla{ border-left-color: #EAB308; }
+
+/* ── Cabecera del acordeón ───────────────────────────────────── */
+.visitHeader {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 18px;
+  background: transparent;
+  border: none;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.visitHeader:hover { background: rgba(0,0,0,0.025); }
+.visitHeaderOpen  { background: rgba(0,0,0,0.02); }
+
+.visitHeaderLeft  { display: flex; flex-direction: column; gap: 6px; flex: 1; min-width: 0; }
+.visitHeaderRight { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+
+.visitTitulo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.visitApto {
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: var(--text);
+}
+.visitTorre {
+  font-size: 0.82rem;
+  font-weight: 600;
+  background: var(--bg);
+  color: var(--text-muted);
+  padding: 2px 8px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+}
+.visitHashId {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.visitMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.metaChip {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  background: var(--bg);
+  padding: 3px 8px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.alertCountBadge {
+  font-size: 0.78rem;
+  font-weight: 700;
+  background: #FEF2F2;
+  color: #991B1B;
+  border: 1.5px solid #FCA5A5;
+  padding: 4px 10px;
+  border-radius: 20px;
+  white-space: nowrap;
+}
+
+.chevron {
+  font-size: 1.4rem;
+  color: var(--text-muted);
+  line-height: 1;
+  display: inline-block;
+  transform: rotate(-90deg);
+  transition: transform 0.22s ease;
+  font-style: normal;
+}
+.chevronOpen { transform: rotate(90deg); }
+
+/* ── Cuerpo del acordeón ─────────────────────────────────────── */
+.visitBody {
+  padding: 0 16px 16px;
   display: flex;
   flex-direction: column;
   gap: 12px;
-  border-left: 4px solid var(--warning);
+  border-top: 1px solid var(--border);
+  padding-top: 14px;
 }
 
-/* Tarjeta "sin detección" tiene borde rojo y fondo levemente rosado */
-.cardSinDeteccion {
-  border-left-color: var(--danger);
-  background: #FFFAFA;
+.btnVerVisita {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  align-self: flex-start;
+  background: var(--bg);
+  color: var(--primary);
+  border: 1.5px solid var(--primary);
+  border-radius: 8px;
+  padding: 7px 14px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  transition: background 0.15s;
 }
+.btnVerVisita:hover { background: #EFF6FF; }
+.btnVerIcon { font-size: 0.9rem; }
 
-/* ── Cabecera ─────────────────────────────────────────────────── */
-.cardHeader { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
-.tipo { font-weight: 700; font-size: 1rem; }
+/* ── Lista de medidores ──────────────────────────────────────── */
+.medList { display: flex; flex-direction: column; gap: 10px; }
 
-.confianza {
-  font-size: 0.75rem;
-  font-weight: 700;
-  border-radius: 6px;
-  padding: 3px 10px;
-  text-transform: uppercase;
-}
-.confianza.alta  { background: #D1FAE5; color: #065F46; }
-.confianza.media { background: #FEF3C7; color: #92400E; }
-.confianza.baja  { background: #FEE2E2; color: #991B1B; }
-
-.badgeSinDeteccion {
-  font-size: 0.75rem;
-  font-weight: 700;
-  border-radius: 6px;
-  padding: 3px 10px;
-  background: #FEE2E2;
-  color: #991B1B;
-}
-
-/* ── Info ubicación ───────────────────────────────────────────── */
-.info { display: flex; flex-direction: column; gap: 3px; font-size: 0.83rem; color: var(--text-muted); }
-
-/* ── Foto ─────────────────────────────────────────────────────── */
-.foto {
-  width: 100%;
-  max-height: 400px;
-  object-fit: contain;
-  background: #000;
-  border-radius: var(--radius-sm);
-  cursor: zoom-in;
-}
-
-/* ── Caja "sin detección" ─────────────────────────────────────── */
-.sinDeteccionBox {
-  background: #FEF2F2;
-  border: 1px solid #FCA5A5;
-  border-radius: var(--radius-sm);
-  padding: 14px;
+/* ── Tarjeta de medidor ──────────────────────────────────────── */
+.medCard {
+  background: var(--bg);
+  border-radius: 10px;
+  border: 1.5px solid var(--border);
+  border-left: 4px solid var(--border);
+  overflow: hidden;
   display: flex;
   flex-direction: column;
-  gap: 8px;
 }
-.sinDeteccionTitle {
-  font-size: 0.92rem;
+
+/* Colores por tipo de alerta */
+.med-sin_deteccion  { border-left-color: #EF4444; }
+.med-no_es_medidor  { border-left-color: #EF4444; }
+.med-discrepancia   { border-left-color: #F59E0B; }
+.med-sin_acceso     { border-left-color: #8B5CF6; }
+.med-baja_confianza { border-left-color: #EAB308; }
+
+/* ── Cabecera del medidor ────────────────────────────────────── */
+.medHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 14px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+.medTipo  { display: flex; align-items: center; gap: 8px; }
+.medEmoji { font-size: 1.15rem; }
+.medLabel { font-size: 0.95rem; font-weight: 700; color: var(--text); }
+
+/* ── Badges ──────────────────────────────────────────────────── */
+.badge {
+  font-size: 0.73rem;
   font-weight: 700;
-  color: #991B1B;
+  padding: 4px 10px;
+  border-radius: 20px;
+  white-space: nowrap;
 }
-.sinDeteccionNota {
+.badgeRojo     { background: #FEE2E2; color: #991B1B; }
+.badgeAmbar    { background: #FEF3C7; color: #92400E; }
+.badgeMorado   { background: #EDE9FE; color: #5B21B6; }
+.badgeAmarillo { background: #FEFCE8; color: #713F12; }
+
+/* ── Foto ────────────────────────────────────────────────────── */
+.fotoWrap {
+  position: relative;
+  background: #0F172A;
+}
+.foto {
+  width: 100%;
+  max-height: 320px;
+  object-fit: contain;
+  display: block;
+  cursor: zoom-in;
+  transition: opacity 0.15s;
+}
+.foto:hover { opacity: 0.92; }
+.fotoHint {
+  position: absolute;
+  bottom: 8px;
+  right: 10px;
+  font-size: 0.72rem;
+  color: rgba(255,255,255,0.6);
+  pointer-events: none;
+}
+
+/* ── Alert boxes ─────────────────────────────────────────────── */
+.alertBox {
+  margin: 12px 14px 0;
+  border-radius: 8px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.alertBoxRojo   { background: #FEF2F2; border: 1px solid #FCA5A5; }
+.alertBoxAmbar  { background: #FFFBEB; border: 1px solid #FDE68A; }
+.alertBoxMorado { background: #F5F3FF; border: 1px solid #C4B5FD; }
+
+.alertBoxTitle {
+  font-size: 0.88rem;
+  font-weight: 700;
+  margin: 0;
+  color: var(--text);
+}
+.alertBoxRojo   .alertBoxTitle { color: #991B1B; }
+.alertBoxAmbar  .alertBoxTitle { color: #78350F; }
+.alertBoxMorado .alertBoxTitle { color: #4C1D95; }
+
+.alertBoxNota {
   font-size: 0.82rem;
-  color: #7F1D1D;
   font-style: italic;
-  background: rgba(255,255,255,0.6);
-  border-radius: 4px;
-  padding: 6px 8px;
+  margin: 0;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: rgba(255,255,255,0.55);
+  color: inherit;
 }
-.sinDeteccionDesc {
-  font-size: 0.82rem;
-  color: #6B7280;
+.alertBoxDesc {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin: 0;
   line-height: 1.5;
 }
 
-/* ── Lecturas (caso baja confianza) ───────────────────────────── */
-.readings { display: flex; flex-direction: column; gap: 6px; font-size: 0.88rem; }
-.readings code { background: var(--bg); padding: 2px 8px; border-radius: 4px; font-size: 0.95rem; }
-.nota {
+/* ── Sección de lecturas ─────────────────────────────────────── */
+.lecturas {
+  padding: 12px 14px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.lecturaGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.lecturaItem {
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.lecturaItemDest {
+  background: #FFFBEB;
+  border: 1.5px solid #F59E0B;
+  border-radius: 8px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.lecturaLabel {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.lecturaVal {
+  font-family: 'Courier New', 'Consolas', monospace;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--text);
+  background: transparent;
+  padding: 0;
+}
+.lecturaValDest { color: #92400E; }
+
+.notaOcr {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
   font-size: 0.8rem;
-  color: #92400E;
+  color: #78350F;
   background: #FFFBEB;
   border-radius: 6px;
-  padding: 6px 10px;
+  padding: 8px 10px;
+  line-height: 1.45;
 }
-.notaMala { background: #FEF2F2; color: #991B1B; }
+.notaOcrMala { background: #FEF2F2; color: #991B1B; }
+.notaOcrIcon { flex-shrink: 0; }
 
-/* ── Fila de acciones ─────────────────────────────────────────── */
-.actionRow {
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-/* Botón: revisar lectura (baja confianza) */
-.reviewBtn {
-  background: var(--bg);
-  color: var(--primary);
-  border: 1.5px solid var(--primary);
-  border-radius: var(--radius-sm);
-  padding: 10px 16px;
-  font-weight: 600;
-  font-size: 0.9rem;
-  transition: background 0.15s;
-}
-.reviewBtn:hover { background: #EFF6FF; }
-
-/* Botón: ingresar manual (sin detección) */
-.btnManual {
-  flex: 1;
-  background: var(--bg);
-  color: var(--primary);
-  border: 1.5px solid var(--primary);
-  border-radius: var(--radius-sm);
-  padding: 10px 14px;
-  font-weight: 600;
-  font-size: 0.88rem;
-  transition: background 0.15s;
-}
-.btnManual:hover { background: #EFF6FF; }
-
-/* Botón: rechazar visita (sin detección) */
-.btnRechazar {
-  flex: 1;
-  background: #FEF2F2;
-  color: #991B1B;
-  border: 1.5px solid #FCA5A5;
-  border-radius: var(--radius-sm);
-  padding: 10px 14px;
-  font-weight: 700;
-  font-size: 0.88rem;
-  transition: background 0.15s;
-}
-.btnRechazar:hover { background: #FEE2E2; }
-
-/* ── Formulario lectura manual ────────────────────────────────── */
-.editRow { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-.editRow input {
-  flex: 1;
-  min-width: 140px;
-  padding: 10px 12px;
-  border: 1.5px solid var(--accent);
-  border-radius: var(--radius-sm);
-  font-size: 1rem;
-  outline: none;
-  font-family: 'Courier New', monospace;
-}
-.saveBtn {
-  background: var(--success);
-  color: #fff;
-  border-radius: var(--radius-sm);
-  padding: 10px 16px;
-  font-weight: 600;
-  font-size: 0.9rem;
-}
-.saveBtn:disabled { opacity: 0.5; cursor: not-allowed; }
-
-.cancelBtn {
-  background: transparent;
-  color: var(--text-muted);
-  border: 1.5px solid var(--border);
-  border-radius: var(--radius-sm);
-  padding: 10px 14px;
-  font-size: 0.9rem;
-}
-
-/* ── Formulario rechazo ───────────────────────────────────────── */
-.rejectBox {
-  background: #FEF2F2;
-  border: 1.5px solid #FCA5A5;
-  border-radius: var(--radius-sm);
+/* ── Formulario de corrección ────────────────────────────────── */
+.editForm {
+  margin: 12px 14px 0;
+  background: #F0F9FF;
+  border: 1.5px solid #BAE6FD;
+  border-radius: 8px;
   padding: 14px;
   display: flex;
   flex-direction: column;
   gap: 10px;
 }
-.rejectTitle {
-  font-size: 0.88rem;
-  font-weight: 700;
-  color: #991B1B;
-  margin: 0;
+.editLabel {
+  font-size: 0.83rem;
+  font-weight: 600;
+  color: var(--text);
 }
-.rejectTextarea {
-  padding: 10px 12px;
-  border: 1.5px solid #FCA5A5;
-  border-radius: var(--radius-sm);
-  font-size: 0.88rem;
-  resize: vertical;
+.editRow {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.editInput {
+  flex: 1;
+  min-width: 140px;
+  padding: 10px 13px;
+  border: 1.5px solid #7DD3FC;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-family: 'Courier New', monospace;
   outline: none;
-  font-family: inherit;
   color: var(--text);
   background: #fff;
+  transition: border-color 0.15s;
 }
-.rejectBtns { display: flex; gap: 8px; flex-wrap: wrap; }
-.rejectConfirmBtn {
-  flex: 1;
-  background: var(--danger);
+.editInput:focus { border-color: var(--primary); }
+
+.btnGuardar {
+  background: #059669;
   color: #fff;
-  border-radius: var(--radius-sm);
-  padding: 10px 16px;
+  border-radius: 8px;
+  padding: 10px 18px;
   font-weight: 700;
   font-size: 0.88rem;
   transition: opacity 0.15s;
+  white-space: nowrap;
 }
-.rejectConfirmBtn:hover:not(:disabled) { opacity: 0.88; }
-.rejectConfirmBtn:disabled { opacity: 0.5; cursor: not-allowed; }
+.btnGuardar:disabled { opacity: 0.5; cursor: not-allowed; }
+.btnGuardar:not(:disabled):hover { opacity: 0.88; }
 
-/* ── Sin acceso ───────────────────────────────────────────────── */
-.cardSinAcceso {
-  border-left-color: #8B5CF6;
-  background: #FAFAFA;
-}
-.badgeSinAcceso {
-  font-size: 0.75rem;
-  font-weight: 700;
-  border-radius: 6px;
-  padding: 3px 10px;
-  background: #EDE9FE;
-  color: #5B21B6;
-}
-.sinAccesoBox {
-  background: #F5F3FF;
-  border: 1px solid #C4B5FD;
-  border-radius: var(--radius-sm);
-  padding: 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-/* Botón: aprobar visita (sin acceso) */
-.btnAprobar {
-  flex: 1;
-  background: #D1FAE5;
-  color: #065F46;
-  border: 1.5px solid #6EE7B7;
-  border-radius: var(--radius-sm);
+.btnCancelar {
+  background: transparent;
+  color: var(--text-muted);
+  border: 1.5px solid var(--border);
+  border-radius: 8px;
   padding: 10px 14px;
-  font-weight: 700;
   font-size: 0.88rem;
   transition: background 0.15s;
 }
-.btnAprobar:hover { background: #A7F3D0; }
+.btnCancelar:hover { background: var(--bg); }
 
-/* ── Discrepancia IA vs auditor ───────────────────────────────── */
-.badgeDiscrepancia {
-  font-size: 0.75rem;
-  font-weight: 700;
-  border-radius: 6px;
-  padding: 3px 10px;
-  background: #FEF3C7;
-  color: #92400E;
+/* ── Botones de acción ───────────────────────────────────────── */
+.actions {
+  display: flex;
+  gap: 8px;
+  padding: 12px 14px 14px;
+  flex-wrap: wrap;
 }
 
-.discrepanciaAlert {
-  background: #FFFBEB;
-  border: 1.5px solid #F59E0B;
-  border-radius: var(--radius-sm);
-  padding: 10px 12px;
-  font-size: 0.85rem;
-  color: #78350F;
-  line-height: 1.5;
-}
-
-.discrepanciaVal {
-  color: #92400E;
-  font-weight: 700;
-  background: #FEF3C7;
-}
-
-.btnAprobarLectura {
+/* Verde — confirmar / aprobar */
+.btnConfirmar {
   flex: 1;
-  background: #D1FAE5;
-  color: #065F46;
-  border: 1.5px solid #6EE7B7;
-  border-radius: var(--radius-sm);
-  padding: 10px 14px;
+  min-width: 120px;
+  background: #059669;
+  color: #fff;
+  border-radius: 8px;
+  padding: 11px 16px;
   font-weight: 700;
-  font-size: 0.85rem;
-  transition: background 0.15s;
+  font-size: 0.88rem;
+  transition: opacity 0.15s;
+  text-align: center;
 }
-.btnAprobarLectura:hover { background: #A7F3D0; }
+.btnConfirmar:hover:not(:disabled) { opacity: 0.88; }
+.btnConfirmar:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Azul — corregir */
+.btnCorregir {
+  flex: 1;
+  min-width: 100px;
+  background: #2563EB;
+  color: #fff;
+  border-radius: 8px;
+  padding: 11px 16px;
+  font-weight: 700;
+  font-size: 0.88rem;
+  transition: opacity 0.15s;
+  text-align: center;
+}
+.btnCorregir:hover { opacity: 0.88; }
+
+/* Rojo — rechazar */
+.btnRechazar {
+  flex: 1;
+  min-width: 100px;
+  background: #DC2626;
+  color: #fff;
+  border-radius: 8px;
+  padding: 11px 16px;
+  font-weight: 700;
+  font-size: 0.88rem;
+  transition: opacity 0.15s;
+  text-align: center;
+}
+.btnRechazar:hover:not(:disabled) { opacity: 0.88; }
+.btnRechazar:disabled { opacity: 0.5; cursor: not-allowed; }
 
 /* ── Lightbox ─────────────────────────────────────────────────── */
 .lightboxOverlay {
   position: fixed; inset: 0;
-  background: rgba(0,0,0,0.88);
+  background: rgba(0,0,0,0.92);
   display: flex; align-items: center; justify-content: center;
   z-index: 1000;
   cursor: zoom-out;
@@ -312,25 +501,12 @@
 }
 .lightboxClose {
   position: absolute; top: 16px; right: 20px;
-  background: rgba(255,255,255,0.15);
-  color: #fff; font-size: 1.4rem;
+  background: rgba(255,255,255,0.12);
+  color: #fff;
+  font-size: 1.3rem;
   width: 40px; height: 40px;
   border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
   transition: background 0.15s;
 }
-.lightboxClose:hover { background: rgba(255,255,255,0.3); }
-
-/* Botón: ver visita */
-.btnVerVisita {
-  align-self: flex-start;
-  background: transparent;
-  color: var(--primary);
-  border: 1.5px solid var(--primary);
-  border-radius: var(--radius-sm);
-  padding: 6px 12px;
-  font-size: 0.82rem;
-  font-weight: 600;
-  transition: background 0.15s;
-}
-.btnVerVisita:hover { background: #EFF6FF; }
+.lightboxClose:hover { background: rgba(255,255,255,0.25); }

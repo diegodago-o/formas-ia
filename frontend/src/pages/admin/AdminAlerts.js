@@ -1,13 +1,15 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import api from '../../services/api';
 import VisitModal from './VisitModal';
 import styles from './AdminAlerts.module.css';
 
 const TIPO_META = {
-  luz:  { label: 'Luz',  emoji: '⚡' },
-  agua: { label: 'Agua', emoji: '💧' },
-  gas:  { label: 'Gas',  emoji: '🔥' },
+  luz:  { label: 'Electricidad', emoji: '⚡', color: '#F59E0B' },
+  agua: { label: 'Agua',         emoji: '💧', color: '#3B82F6' },
+  gas:  { label: 'Gas',          emoji: '🔥', color: '#EF4444' },
 };
+
+const SEVERIDAD = { sin_deteccion: 0, no_es_medidor: 1, discrepancia: 2, sin_acceso: 3, baja_confianza: 4 };
 
 function tipoAlerta(a) {
   if (a.sin_acceso)       return 'sin_acceso';
@@ -18,36 +20,56 @@ function tipoAlerta(a) {
   return 'baja_confianza';
 }
 
+const BADGE_META = {
+  sin_deteccion:  { label: 'Sin detección',  cls: 'badgeRojo',     icon: '📷' },
+  no_es_medidor:  { label: 'No es medidor',  cls: 'badgeRojo',     icon: '🚫' },
+  discrepancia:   { label: 'Discrepancia',   cls: 'badgeAmbar',    icon: '⚠️' },
+  sin_acceso:     { label: 'Sin acceso',     cls: 'badgeMorado',   icon: '🔒' },
+  baja_confianza: { label: 'Baja confianza', cls: 'badgeAmarillo', icon: '🔍' },
+};
+
+// Color del borde izquierdo de la tarjeta de visita según la alerta más grave
+function severidadVisita(alertas) {
+  const tipos = alertas.map(tipoAlerta);
+  const min = Math.min(...tipos.map(t => SEVERIDAD[t]));
+  if (min <= 1) return 'visita-roja';
+  if (min === 2) return 'visita-ambar';
+  if (min === 3) return 'visita-morada';
+  return 'visita-amarilla';
+}
+
 export default function AdminAlerts() {
   const [alerts, setAlerts]           = useState([]);
   const [loading, setLoading]         = useState(true);
   const [viewVisitId, setViewVisitId] = useState(null);
   const [lightbox, setLightbox]       = useState(null);
-  const [editing, setEditing]         = useState(null); // medidor_id en edición
+  const [editing, setEditing]         = useState(null);
   const [newVal, setNewVal]           = useState('');
   const [saving, setSaving]           = useState(false);
+  const [openVisits, setOpenVisits]   = useState(new Set());
 
   const load = () => {
     setLoading(true);
     api.get('/admin/alerts')
-      .then(r => setAlerts(r.data))
+      .then(r => {
+        setAlerts(r.data);
+        // Abrir todos los grupos por defecto
+        const ids = new Set([...new Set(r.data.map(a => a.visita_id))]);
+        setOpenVisits(ids);
+      })
       .finally(() => setLoading(false));
   };
 
   useEffect(() => { load(); }, []);
 
-  // Resolver un hallazgo a nivel de medidor
   const resolver = async (id, estado_revision_ocr, lectura_confirmada = null) => {
     setSaving(true);
     try {
       await api.patch(`/admin/medidores/${id}`, { estado_revision_ocr, lectura_confirmada });
       load();
-    } finally {
-      setSaving(false);
-    }
+    } finally { setSaving(false); }
   };
 
-  // Guardar lectura corregida manualmente
   const confirmarLectura = async (id) => {
     if (!newVal.trim()) return;
     setSaving(true);
@@ -59,256 +81,358 @@ export default function AdminAlerts() {
       setEditing(null);
       setNewVal('');
       load();
-    } finally {
-      setSaving(false);
-    }
+    } finally { setSaving(false); }
   };
 
-  if (loading) return <div className={styles.loading}>Cargando alertas...</div>;
+  const toggleVisit = (id) => {
+    setOpenVisits(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+
+  // Agrupar alertas por visita
+  const grupos = useMemo(() => {
+    const map = {};
+    alerts.forEach(a => {
+      if (!map[a.visita_id]) {
+        map[a.visita_id] = {
+          visita_id: a.visita_id, ciudad: a.ciudad, conjunto: a.conjunto,
+          torre: a.torre, apartamento: a.apartamento, auditor: a.auditor,
+          fecha: a.fecha, alertas: [],
+        };
+      }
+      map[a.visita_id].alertas.push(a);
+    });
+    return Object.values(map).sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
+  }, [alerts]);
+
+  if (loading) return (
+    <div className={styles.loadingWrap}>
+      <div className={styles.spinner} />
+      <span>Cargando alertas OCR...</span>
+    </div>
+  );
 
   if (!alerts.length) return (
-    <div className={styles.empty}>
-      <span>✅</span>
-      <p>No hay alertas OCR pendientes</p>
+    <div className={styles.emptyState}>
+      <div className={styles.emptyIcon}>✅</div>
+      <h3 className={styles.emptyTitle}>Sin alertas pendientes</h3>
+      <p className={styles.emptyDesc}>Todos los medidores han sido revisados.</p>
     </div>
   );
 
   return (
-    <div>
-      <p className={styles.count}>
-        {alerts.length} medidor{alerts.length !== 1 ? 'es' : ''} requiere{alerts.length === 1 ? '' : 'n'} revisión
-      </p>
+    <div className={styles.page}>
+      {/* Encabezado */}
+      <div className={styles.pageHeader}>
+        <div>
+          <h2 className={styles.pageTitle}>Alertas OCR</h2>
+          <p className={styles.pageSubtitle}>Revisión de medidores con hallazgos pendientes</p>
+        </div>
+        <div className={styles.pageStats}>
+          <div className={styles.statChip}>
+            <span className={styles.statNum}>{grupos.length}</span>
+            <span className={styles.statLabel}>visitas</span>
+          </div>
+          <div className={`${styles.statChip} ${styles.statChipAlert}`}>
+            <span className={styles.statNum}>{alerts.length}</span>
+            <span className={styles.statLabel}>medidores</span>
+          </div>
+        </div>
+      </div>
 
+      {/* Lista acordeón por visita */}
       <div className={styles.list}>
-        {alerts.map(a => {
-          const meta        = TIPO_META[a.tipo];
-          const tipo        = tipoAlerta(a);
-          const sinDet      = tipo === 'sin_deteccion';
-          const sinAcceso   = tipo === 'sin_acceso';
-          const noEsMedidor = tipo === 'no_es_medidor';
-          const discrepancia = tipo === 'discrepancia';
-          const isEditing   = editing === a.medidor_id;
+        {grupos.map(grupo => {
+          const isOpen  = openVisits.has(grupo.visita_id);
+          const sevCls  = severidadVisita(grupo.alertas);
 
           return (
-            <div
-              key={a.medidor_id}
-              className={`${styles.card} ${(sinDet || noEsMedidor) ? styles.cardSinDeteccion : ''} ${sinAcceso ? styles.cardSinAcceso : ''}`}
-            >
-              {/* Cabecera */}
-              <div className={styles.cardHeader}>
-                <span className={styles.tipo}>{meta.emoji} Medidor de {meta.label}</span>
-                {sinAcceso
-                  ? <span className={styles.badgeSinAcceso}>🚫 Sin acceso</span>
-                  : noEsMedidor
-                    ? <span className={styles.badgeSinDeteccion}>🚫 No es medidor</span>
-                    : sinDet
-                      ? <span className={styles.badgeSinDeteccion}>📸 Sin detección</span>
-                      : discrepancia
-                        ? <span className={styles.badgeDiscrepancia}>⚠️ Discrepancia</span>
-                        : <span className={`${styles.confianza} ${styles[a.confianza_ocr]}`}>
-                            {a.confianza_ocr?.toUpperCase()}
-                          </span>
-                }
-              </div>
+            <div key={grupo.visita_id} className={`${styles.visitCard} ${styles[sevCls]}`}>
 
-              {/* Info ubicación */}
-              <div className={styles.info}>
-                <span>🆔 Visita #{a.visita_id}</span>
-                <span>📍 {a.ciudad} · {a.conjunto}{a.torre ? ` · Torre ${a.torre}` : ''} · Apto {a.apartamento}</span>
-                <span>👤 {a.auditor}</span>
-                <span>📅 {new Date(a.fecha).toLocaleDateString('es-CO')}</span>
-              </div>
-              <button className={styles.btnVerVisita} onClick={() => setViewVisitId(a.visita_id)}>
-                🔍 Ver visita #{a.visita_id}
+              {/* ── Header acordeón ── */}
+              <button
+                className={`${styles.visitHeader} ${isOpen ? styles.visitHeaderOpen : ''}`}
+                onClick={() => toggleVisit(grupo.visita_id)}
+              >
+                <div className={styles.visitHeaderLeft}>
+                  <div className={styles.visitTitulo}>
+                    <span className={styles.visitApto}>Apto {grupo.apartamento}</span>
+                    {grupo.torre && <span className={styles.visitTorre}>Torre {grupo.torre}</span>}
+                    <span className={styles.visitHashId}>#{grupo.visita_id}</span>
+                  </div>
+                  <div className={styles.visitMeta}>
+                    <span className={styles.metaChip}>🏘️ {grupo.conjunto}</span>
+                    <span className={styles.metaChip}>📍 {grupo.ciudad}</span>
+                    <span className={styles.metaChip}>👤 {grupo.auditor}</span>
+                    <span className={styles.metaChip}>
+                      📅 {new Date(grupo.fecha).toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' })}
+                    </span>
+                  </div>
+                </div>
+                <div className={styles.visitHeaderRight}>
+                  <span className={styles.alertCountBadge}>
+                    {grupo.alertas.length} alerta{grupo.alertas.length !== 1 ? 's' : ''}
+                  </span>
+                  <span className={`${styles.chevron} ${isOpen ? styles.chevronOpen : ''}`}>
+                    ‹
+                  </span>
+                </div>
               </button>
 
-              {/* Foto */}
-              {a.foto_path && (
-                <img
-                  src={`/uploads/${a.foto_path}`}
-                  alt="Foto medidor"
-                  className={styles.foto}
-                  onClick={() => setLightbox(`/uploads/${a.foto_path}`)}
-                />
-              )}
-
-              {/* ── Sin acceso ── */}
-              {sinAcceso && (
-                <div className={styles.sinAccesoBox}>
-                  <div className={styles.sinDeteccionTitle}>🚫 El auditor no pudo acceder a este medidor</div>
-                  {a.motivo_sin_acceso && (
-                    <div className={styles.sinDeteccionNota}>💬 {a.motivo_sin_acceso}</div>
-                  )}
-                  <div className={styles.sinDeteccionDesc}>
-                    Aprueba si el motivo es válido, o rechaza esta lectura para que el auditor vuelva a intentarlo.
-                  </div>
-                </div>
-              )}
-
-              {/* ── No es medidor ── */}
-              {noEsMedidor && (
-                <div className={styles.sinDeteccionBox}>
-                  <div className={styles.sinDeteccionTitle}>🚫 La IA detectó que esta foto no corresponde a un medidor</div>
-                  {a.nota_ocr && (
-                    <div className={styles.sinDeteccionNota}>💬 {a.nota_ocr}</div>
-                  )}
-                  <div className={styles.sinDeteccionDesc}>
-                    El auditor registró la visita offline sin poder verificar la foto con IA.
-                    Aprueba si el contexto lo justifica, o rechaza esta lectura para que se vuelva a registrar.
-                  </div>
-                </div>
-              )}
-
-              {/* ── Sin detección ── */}
-              {sinDet && (
-                <div className={styles.sinDeteccionBox}>
-                  <div className={styles.sinDeteccionTitle}>⚠️ La IA no pudo leer el número del medidor</div>
-                  {a.nota_ocr && (
-                    <div className={styles.sinDeteccionNota}>💬 {a.nota_ocr}</div>
-                  )}
-                  <div className={styles.sinDeteccionDesc}>
-                    Ingresa la lectura correcta revisando la foto, o rechaza esta lectura para que el auditor retome la foto.
-                  </div>
-                </div>
-              )}
-
-              {/* ── Discrepancia / baja confianza ── */}
-              {!sinDet && !sinAcceso && !noEsMedidor && (
-                <div className={styles.readings}>
-                  {discrepancia && (
-                    <div className={styles.discrepanciaAlert}>
-                      ⚠️ <strong>Discrepancia:</strong> el auditor registró un valor diferente al detectado por la IA.
-                      Verifica la foto para confirmar cuál es el valor correcto.
-                    </div>
-                  )}
-                  <div><strong>IA detectó:</strong> <code>{a.lectura_ocr ?? '–'}</code></div>
-                  <div>
-                    <strong>Auditor registró:</strong>{' '}
-                    <code className={discrepancia ? styles.discrepanciaVal : ''}>{a.lectura_confirmada ?? '–'}</code>
-                  </div>
-                  {a.nota_ocr && <div className={styles.nota}>💬 {a.nota_ocr}</div>}
-                  {a.calidad_foto && a.calidad_foto !== 'buena' && (
-                    <div className={`${styles.nota} ${a.calidad_foto === 'mala' ? styles.notaMala : ''}`}>
-                      📷 Calidad de foto: <strong>{a.calidad_foto}</strong>
-                      {a.motivo_calidad && ` — ${a.motivo_calidad}`}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Formulario: ingresar / corregir lectura */}
-              {isEditing && (
-                <div className={styles.editRow}>
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    value={newVal}
-                    onChange={e => setNewVal(e.target.value)}
-                    placeholder="Ej: 00123.45"
-                    autoFocus
-                  />
+              {/* ── Cuerpo acordeón ── */}
+              {isOpen && (
+                <div className={styles.visitBody}>
                   <button
-                    className={styles.saveBtn}
-                    onClick={() => confirmarLectura(a.medidor_id)}
-                    disabled={!newVal.trim() || saving}
+                    className={styles.btnVerVisita}
+                    onClick={() => setViewVisitId(grupo.visita_id)}
                   >
-                    {saving ? '...' : '✓ Guardar'}
+                    <span className={styles.btnVerIcon}>🔍</span>
+                    Ver visita completa
                   </button>
-                  <button
-                    className={styles.cancelBtn}
-                    onClick={() => { setEditing(null); setNewVal(''); }}
-                  >
-                    Cancelar
-                  </button>
-                </div>
-              )}
 
-              {/* ── Botones de acción ── */}
-              {!isEditing && (
-                <div className={styles.actionRow}>
-                  {/* Sin acceso / No es medidor */}
-                  {(sinAcceso || noEsMedidor) && (
-                    <>
-                      <button
-                        className={styles.btnAprobar}
-                        onClick={() => resolver(a.medidor_id, 'aprobado')}
-                        disabled={saving}
-                      >
-                        ✓ Aprobar lectura
-                      </button>
-                      <button
-                        className={styles.btnRechazar}
-                        onClick={() => resolver(a.medidor_id, 'rechazado')}
-                        disabled={saving}
-                      >
-                        ✕ Rechazar lectura
-                      </button>
-                    </>
-                  )}
+                  {/* Tarjetas de medidor */}
+                  <div className={styles.medList}>
+                    {grupo.alertas.map(a => {
+                      const meta       = TIPO_META[a.tipo];
+                      const tipo       = tipoAlerta(a);
+                      const badge      = BADGE_META[tipo];
+                      const sinDet     = tipo === 'sin_deteccion';
+                      const sinAcceso  = tipo === 'sin_acceso';
+                      const noEsMed    = tipo === 'no_es_medidor';
+                      const discrep    = tipo === 'discrepancia';
+                      const isEditing  = editing === a.medidor_id;
 
-                  {/* Sin detección */}
-                  {sinDet && (
-                    <>
-                      <button
-                        className={styles.btnManual}
-                        onClick={() => { setEditing(a.medidor_id); setNewVal(''); }}
-                      >
-                        📝 Ingresar lectura
-                      </button>
-                      <button
-                        className={styles.btnRechazar}
-                        onClick={() => resolver(a.medidor_id, 'rechazado')}
-                        disabled={saving}
-                      >
-                        ✕ Rechazar lectura
-                      </button>
-                    </>
-                  )}
+                      return (
+                        <div key={a.medidor_id} className={`${styles.medCard} ${styles[`med-${tipo}`]}`}>
 
-                  {/* Discrepancia */}
-                  {discrepancia && (
-                    <>
-                      <button
-                        className={styles.btnAprobarLectura}
-                        onClick={() => resolver(a.medidor_id, 'aprobado', a.lectura_confirmada)}
-                        disabled={saving}
-                      >
-                        ✓ Confirmar valor del auditor ({a.lectura_confirmada})
-                      </button>
-                      <button
-                        className={styles.reviewBtn}
-                        onClick={() => { setEditing(a.medidor_id); setNewVal(a.lectura_confirmada || a.lectura_ocr || ''); }}
-                      >
-                        ✏️ Corregir
-                      </button>
-                      <button
-                        className={styles.btnRechazar}
-                        onClick={() => resolver(a.medidor_id, 'rechazado')}
-                        disabled={saving}
-                      >
-                        ✕ Rechazar lectura
-                      </button>
-                    </>
-                  )}
+                          {/* Cabecera medidor */}
+                          <div className={styles.medHeader}>
+                            <div className={styles.medTipo}>
+                              <span className={styles.medEmoji} style={{ color: meta.color }}>{meta.emoji}</span>
+                              <span className={styles.medLabel}>Medidor de {meta.label}</span>
+                            </div>
+                            <span className={`${styles.badge} ${styles[badge.cls]}`}>
+                              {badge.icon} {badge.label}
+                            </span>
+                          </div>
 
-                  {/* Baja confianza */}
-                  {!sinDet && !sinAcceso && !noEsMedidor && !discrepancia && (
-                    <>
-                      <button
-                        className={styles.btnAprobar}
-                        onClick={() => resolver(a.medidor_id, 'aprobado', a.lectura_confirmada)}
-                        disabled={saving}
-                      >
-                        ✓ Confirmar lectura
-                      </button>
-                      <button
-                        className={styles.reviewBtn}
-                        onClick={() => { setEditing(a.medidor_id); setNewVal(a.lectura_confirmada || a.lectura_ocr || ''); }}
-                      >
-                        ✏️ Corregir lectura
-                      </button>
-                    </>
-                  )}
+                          {/* Foto */}
+                          {a.foto_path && (
+                            <div className={styles.fotoWrap}>
+                              <img
+                                src={`/uploads/${a.foto_path}`}
+                                alt="Foto medidor"
+                                className={styles.foto}
+                                onClick={() => setLightbox(`/uploads/${a.foto_path}`)}
+                              />
+                              <span className={styles.fotoHint}>Toca para ampliar</span>
+                            </div>
+                          )}
+
+                          {/* ── Sin acceso ── */}
+                          {sinAcceso && (
+                            <div className={`${styles.alertBox} ${styles.alertBoxMorado}`}>
+                              <p className={styles.alertBoxTitle}>El auditor no pudo acceder a este medidor</p>
+                              {a.motivo_sin_acceso && (
+                                <p className={styles.alertBoxNota}>"{a.motivo_sin_acceso}"</p>
+                              )}
+                              <p className={styles.alertBoxDesc}>
+                                Aprueba si el motivo es válido, o rechaza para que el auditor vuelva a intentarlo.
+                              </p>
+                            </div>
+                          )}
+
+                          {/* ── No es medidor ── */}
+                          {noEsMed && (
+                            <div className={`${styles.alertBox} ${styles.alertBoxRojo}`}>
+                              <p className={styles.alertBoxTitle}>La IA detectó que esta foto no corresponde a un medidor</p>
+                              {a.nota_ocr && (
+                                <p className={styles.alertBoxNota}>"{a.nota_ocr}"</p>
+                              )}
+                              <p className={styles.alertBoxDesc}>
+                                Aprueba si el contexto lo justifica, o rechaza para que se vuelva a registrar.
+                              </p>
+                            </div>
+                          )}
+
+                          {/* ── Sin detección ── */}
+                          {sinDet && (
+                            <div className={`${styles.alertBox} ${styles.alertBoxRojo}`}>
+                              <p className={styles.alertBoxTitle}>La IA no pudo leer el número del medidor</p>
+                              {a.nota_ocr && (
+                                <p className={styles.alertBoxNota}>"{a.nota_ocr}"</p>
+                              )}
+                              <p className={styles.alertBoxDesc}>
+                                Ingresa la lectura correcta revisando la foto, o rechaza para que el auditor retome la foto.
+                              </p>
+                            </div>
+                          )}
+
+                          {/* ── Lecturas: discrepancia / baja confianza ── */}
+                          {!sinDet && !sinAcceso && !noEsMed && (
+                            <div className={styles.lecturas}>
+                              {discrep && (
+                                <div className={`${styles.alertBox} ${styles.alertBoxAmbar}`}>
+                                  <p className={styles.alertBoxTitle}>
+                                    La IA y el auditor registraron valores diferentes
+                                  </p>
+                                  <p className={styles.alertBoxDesc}>Verifica la foto y confirma el valor correcto.</p>
+                                </div>
+                              )}
+                              <div className={styles.lecturaGrid}>
+                                <div className={styles.lecturaItem}>
+                                  <span className={styles.lecturaLabel}>Lectura IA</span>
+                                  <code className={styles.lecturaVal}>{a.lectura_ocr ?? '—'}</code>
+                                </div>
+                                <div className={discrep ? styles.lecturaItemDest : styles.lecturaItem}>
+                                  <span className={styles.lecturaLabel}>Lectura Auditor</span>
+                                  <code className={`${styles.lecturaVal} ${discrep ? styles.lecturaValDest : ''}`}>
+                                    {a.lectura_confirmada ?? '—'}
+                                  </code>
+                                </div>
+                              </div>
+                              {a.nota_ocr && (
+                                <div className={styles.notaOcr}>
+                                  <span className={styles.notaOcrIcon}>💬</span>
+                                  <span>{a.nota_ocr}</span>
+                                </div>
+                              )}
+                              {a.calidad_foto && a.calidad_foto !== 'buena' && (
+                                <div className={`${styles.notaOcr} ${a.calidad_foto === 'mala' ? styles.notaOcrMala : ''}`}>
+                                  <span className={styles.notaOcrIcon}>📷</span>
+                                  <span>Calidad: <strong>{a.calidad_foto}</strong>{a.motivo_calidad && ` — ${a.motivo_calidad}`}</span>
+                                </div>
+                              )}
+                            </div>
+                          )}
+
+                          {/* ── Formulario corrección ── */}
+                          {isEditing && (
+                            <div className={styles.editForm}>
+                              <label className={styles.editLabel}>Ingresa la lectura correcta:</label>
+                              <div className={styles.editRow}>
+                                <input
+                                  type="text"
+                                  inputMode="decimal"
+                                  value={newVal}
+                                  onChange={e => setNewVal(e.target.value)}
+                                  placeholder="Ej: 00201.126"
+                                  className={styles.editInput}
+                                  autoFocus
+                                />
+                                <button
+                                  className={styles.btnGuardar}
+                                  onClick={() => confirmarLectura(a.medidor_id)}
+                                  disabled={!newVal.trim() || saving}
+                                >
+                                  {saving ? '...' : '✓ Guardar'}
+                                </button>
+                                <button
+                                  className={styles.btnCancelar}
+                                  onClick={() => { setEditing(null); setNewVal(''); }}
+                                >
+                                  Cancelar
+                                </button>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* ── Botones de acción ── */}
+                          {!isEditing && (
+                            <div className={styles.actions}>
+                              {/* Sin acceso / No es medidor */}
+                              {(sinAcceso || noEsMed) && (
+                                <>
+                                  <button
+                                    className={styles.btnConfirmar}
+                                    onClick={() => resolver(a.medidor_id, 'aprobado')}
+                                    disabled={saving}
+                                  >
+                                    ✓ Aprobar
+                                  </button>
+                                  <button
+                                    className={styles.btnRechazar}
+                                    onClick={() => resolver(a.medidor_id, 'rechazado')}
+                                    disabled={saving}
+                                  >
+                                    ✕ Rechazar
+                                  </button>
+                                </>
+                              )}
+
+                              {/* Sin detección */}
+                              {sinDet && (
+                                <>
+                                  <button
+                                    className={styles.btnCorregir}
+                                    onClick={() => { setEditing(a.medidor_id); setNewVal(''); }}
+                                  >
+                                    📝 Ingresar lectura
+                                  </button>
+                                  <button
+                                    className={styles.btnRechazar}
+                                    onClick={() => resolver(a.medidor_id, 'rechazado')}
+                                    disabled={saving}
+                                  >
+                                    ✕ Rechazar
+                                  </button>
+                                </>
+                              )}
+
+                              {/* Discrepancia */}
+                              {discrep && (
+                                <>
+                                  <button
+                                    className={styles.btnConfirmar}
+                                    onClick={() => resolver(a.medidor_id, 'aprobado', a.lectura_confirmada)}
+                                    disabled={saving}
+                                  >
+                                    ✓ Confirmar auditor
+                                  </button>
+                                  <button
+                                    className={styles.btnCorregir}
+                                    onClick={() => { setEditing(a.medidor_id); setNewVal(a.lectura_confirmada || a.lectura_ocr || ''); }}
+                                  >
+                                    ✏️ Corregir
+                                  </button>
+                                  <button
+                                    className={styles.btnRechazar}
+                                    onClick={() => resolver(a.medidor_id, 'rechazado')}
+                                    disabled={saving}
+                                  >
+                                    ✕ Rechazar
+                                  </button>
+                                </>
+                              )}
+
+                              {/* Baja confianza */}
+                              {!sinDet && !sinAcceso && !noEsMed && !discrep && (
+                                <>
+                                  <button
+                                    className={styles.btnConfirmar}
+                                    onClick={() => resolver(a.medidor_id, 'aprobado', a.lectura_confirmada)}
+                                    disabled={saving}
+                                  >
+                                    ✓ Confirmar lectura
+                                  </button>
+                                  <button
+                                    className={styles.btnCorregir}
+                                    onClick={() => { setEditing(a.medidor_id); setNewVal(a.lectura_confirmada || a.lectura_ocr || ''); }}
+                                  >
+                                    ✏️ Corregir
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          )}
+
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               )}
             </div>
