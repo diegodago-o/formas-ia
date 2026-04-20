@@ -58,12 +58,13 @@ async function llamarModelo(imageBuffer, mediaType, prompt) {
 function parsearResultado(json) {
   const calidad   = json.calidad_foto || 'buena';
   const esMedidor = json.es_medidor !== false;
-  const lectura   = json.lectura ?? null;
+  // Refuerzo anti-alucinación: si calidad es mala, la lectura no es confiable
+  const lectura   = (calidad === 'mala') ? null : (json.lectura ?? null);
   const confianza = json.confianza ?? 'baja';
   return {
     es_medidor:        esMedidor,
     lectura,
-    confianza,
+    confianza:         (calidad === 'mala') ? 'baja' : confianza,
     calidad_foto:      calidad,
     motivo_calidad:    (json.motivo_calidad && !json.motivo_calidad.toLowerCase().includes('omitir'))
                          ? json.motivo_calidad : null,
@@ -108,6 +109,44 @@ Regla clave: los efectos ópticos del vidrio (halos, sombras, doble contorno) NO
 Si la foto presenta estos síntomas, anota en la nota: "foto a través de vidrio".`.trim();
 
 // ─────────────────────────────────────────────────────────────
+// Reglas anti-alucinación — inyectadas en los 6 prompts
+// ─────────────────────────────────────────────────────────────
+const ANTI_ALUCINACION = `
+REGLAS ANTI-ALUCINACIÓN — de obligatorio cumplimiento:
+
+REGLA 1 — SOLO LO QUE VES:
+Escribe únicamente los dígitos que puedes leer directamente en la imagen.
+NUNCA completes, rellenes ni inferras dígitos que no están claramente visibles.
+Si un dígito no es distinguible → no puedes afirmar cuál es.
+
+REGLA 2 — VENTANILLA INCOMPLETA (imagen recortada o cortada):
+Si la ventanilla de tambores no aparece COMPLETA en el encuadre:
+→ lectura = null
+→ calidad_foto = "mala"
+→ motivo_calidad = "ventanilla recortada — no se ven todos los dígitos"
+→ nota: indica cuántos dígitos sí se ven y cuáles son (ej: "se ven 4 dígitos: 1, 2, 6, parcialmente")
+NO generes una lectura de 8 dígitos si no ves los 8 dígitos.
+
+REGLA 3 — IMAGEN ILEGIBLE O BORROSA:
+Si la imagen está desenfocada, muy oscura, borrosa o con reflejos que impiden leer los dígitos:
+→ lectura = null
+→ calidad_foto = "mala"
+→ motivo_calidad = descripción del problema real (ej: "imagen borrosa", "reflejo total en ventanilla")
+NO generes ninguna lectura. NO afirmes que los dígitos son nítidos cuando no lo son.
+
+REGLA 4 — PROHIBICIÓN DE DESCRIPCIONES FALSAS:
+NUNCA escribas:
+· "Los dígitos son nítidos y claramente visibles" si hay blur, recorte o reflejo
+· "La ventanilla muestra claramente todos los dígitos" si la imagen está recortada
+· "No hay reflejos" sin evidencia visual
+Solo describe lo que realmente observas.
+
+REGLA 5 — LECTURA PARCIAL PERMITIDA:
+Si solo algunos dígitos son visibles con certeza y el resto no se puede leer:
+→ lectura = null (no inventes los faltantes)
+→ en la nota: "se observan parcialmente los dígitos [X, Y, Z]; el resto no es legible"`.trim();
+
+// ─────────────────────────────────────────────────────────────
 // PROMPTS — Primera pasada: enumeración posición a posición L→R
 // ─────────────────────────────────────────────────────────────
 const PROMPTS_COT = {
@@ -115,6 +154,12 @@ const PROMPTS_COT = {
   gas: `Eres experto en lectura de medidores de gas domiciliario en Colombia.
 
 OBJETIVO: Extraer la lectura del display de tambores giratorios con precisión absoluta.
+PRINCIPIO RECTOR: Lee SOLO lo que está visible. Jamás inventes ni completes dígitos.
+
+PASO 0 — VALIDACIÓN PREVIA (antes de leer cualquier dígito):
+  a) ¿La ventanilla de tambores está completamente dentro del encuadre? Si no → lectura = null, calidad = "mala".
+  b) ¿La imagen está lo suficientemente nítida para distinguir los dígitos? Si no → lectura = null, calidad = "mala".
+  Si fallas (a) o (b), omite los pasos siguientes y responde directamente con el JSON de error.
 
 ANATOMÍA DEL DISPLAY:
 - Ventanilla rectangular ubicada en la parte frontal superior del medidor
@@ -161,6 +206,8 @@ CONFIANZA:
 - "alta": los 8 dígitos son inequívocos después de la auditoría
 - "baja": 2 o más dígitos siguen siendo dudosos tras la auditoría
 
+${ANTI_ALUCINACION}
+
 ${ES_MEDIDOR_REGLA}
 
 Responde SOLO con este JSON (sin texto previo ni posterior):
@@ -177,6 +224,12 @@ Responde SOLO con este JSON (sin texto previo ni posterior):
   agua: `Eres experto en lectura de medidores de agua domiciliario en Colombia.
 
 OBJETIVO: Extraer la lectura del display de tambores giratorios con precisión absoluta.
+PRINCIPIO RECTOR: Lee SOLO lo que está visible. Jamás inventes ni completes dígitos.
+
+PASO 0 — VALIDACIÓN PREVIA (antes de leer cualquier dígito):
+  a) ¿La ventanilla de tambores está completamente dentro del encuadre? Si no → lectura = null, calidad = "mala".
+  b) ¿La imagen está lo suficientemente nítida para distinguir los dígitos? Si no → lectura = null, calidad = "mala".
+  Si fallas (a) o (b), omite los pasos siguientes y responde directamente con el JSON de error.
 
 ANATOMÍA DEL DISPLAY:
 - Ventanilla ovalada o rectangular en la parte frontal del medidor (carcasa azul o gris)
@@ -223,6 +276,8 @@ CONFIANZA:
 - "alta": los 8 dígitos son inequívocos después de la auditoría
 - "baja": 2 o más dígitos siguen siendo dudosos
 
+${ANTI_ALUCINACION}
+
 ${ES_MEDIDOR_REGLA}
 
 Responde SOLO con este JSON (sin texto previo ni posterior):
@@ -239,6 +294,12 @@ Responde SOLO con este JSON (sin texto previo ni posterior):
   luz: `Eres experto en lectura de medidores de energía eléctrica domiciliario en Colombia.
 
 OBJETIVO: Extraer la lectura del display del medidor (tambores mecánicos o pantalla LCD) con precisión absoluta.
+PRINCIPIO RECTOR: Lee SOLO lo que está visible. Jamás inventes ni completes dígitos.
+
+PASO 0 — VALIDACIÓN PREVIA (antes de leer cualquier dígito):
+  a) ¿El display está completamente dentro del encuadre? Si no → lectura = null, calidad = "mala".
+  b) ¿La imagen está lo suficientemente nítida para distinguir los dígitos? Si no → lectura = null, calidad = "mala".
+  Si fallas (a) o (b), omite los pasos siguientes y responde directamente con el JSON de error.
 
 ANATOMÍA DEL DISPLAY — dos tipos posibles:
 
@@ -291,6 +352,8 @@ CONFIANZA:
 - "alta": todos los dígitos son inequívocos después de la auditoría
 - "baja": 2 o más dígitos siguen siendo dudosos
 
+${ANTI_ALUCINACION}
+
 ${ES_MEDIDOR_REGLA}
 
 Responde SOLO con este JSON (sin texto previo ni posterior):
@@ -314,6 +377,12 @@ const PROMPTS_VERIFICACION = {
   gas: `Analiza esta imagen de un medidor de gas domiciliario colombiano.
 
 CONTEXTO: La lectura se extrae de la ventanilla de tambores giratorios, NO del número de serie del cuerpo metálico ni de stickers o etiquetas.
+PRINCIPIO RECTOR: Lee SOLO lo que está visible. Jamás inventes ni completes dígitos.
+
+VALIDACIÓN PREVIA (obligatoria antes de cualquier lectura):
+  a) ¿La ventanilla de tambores está completamente visible en la imagen? Si no → lectura = null, calidad = "mala".
+  b) ¿Puedes distinguir los dígitos con claridad? Si no → lectura = null, calidad = "mala".
+  Si fallas (a) o (b), responde directamente con JSON de error sin proceder al método.
 
 MÉTODO — lee por grupos de color (no de izquierda a derecha):
 
@@ -344,6 +413,8 @@ CONFIANZA:
 - "alta": todos los dígitos son inequívocos
 - "baja": 2 o más dígitos son dudosos
 
+${ANTI_ALUCINACION}
+
 ${ES_MEDIDOR_REGLA}
 
 Responde ÚNICAMENTE con JSON (sin texto previo ni posterior):
@@ -360,6 +431,12 @@ Responde ÚNICAMENTE con JSON (sin texto previo ni posterior):
   agua: `Analiza esta imagen de un medidor de agua domiciliario colombiano (carcasa azul o gris).
 
 CONTEXTO: La lectura se extrae de la ventanilla de tambores giratorios del frente del medidor. El número de serie grabado en el metal del cuerpo NO es la lectura — ignóralo por completo.
+PRINCIPIO RECTOR: Lee SOLO lo que está visible. Jamás inventes ni completes dígitos.
+
+VALIDACIÓN PREVIA (obligatoria antes de cualquier lectura):
+  a) ¿La ventanilla de tambores está completamente visible en la imagen? Si no → lectura = null, calidad = "mala".
+  b) ¿Puedes distinguir los dígitos con claridad? Si no → lectura = null, calidad = "mala".
+  Si fallas (a) o (b), responde directamente con JSON de error sin proceder al método.
 
 MÉTODO — lee por grupos de color (no de izquierda a derecha):
 
@@ -391,6 +468,8 @@ CONFIANZA:
 - "alta": todos los dígitos son inequívocos
 - "baja": 2 o más dígitos son dudosos
 
+${ANTI_ALUCINACION}
+
 ${ES_MEDIDOR_REGLA}
 
 Responde ÚNICAMENTE con JSON (sin texto previo ni posterior):
@@ -407,6 +486,12 @@ Responde ÚNICAMENTE con JSON (sin texto previo ni posterior):
   luz: `Analiza esta imagen de un medidor de electricidad domiciliario colombiano.
 
 CONTEXTO: Lee el display del medidor (tambores mecánicos o pantalla LCD). Ignora el número de serie del cuerpo, la marca y los stickers de la empresa eléctrica.
+PRINCIPIO RECTOR: Lee SOLO lo que está visible. Jamás inventes ni completes dígitos.
+
+VALIDACIÓN PREVIA (obligatoria antes de cualquier lectura):
+  a) ¿El display está completamente visible en la imagen? Si no → lectura = null, calidad = "mala".
+  b) ¿Puedes distinguir los dígitos con claridad? Si no → lectura = null, calidad = "mala".
+  Si fallas (a) o (b), responde directamente con JSON de error sin proceder al método.
 
 PASO PREVIO — IDENTIFICA EL TIPO DE DISPLAY:
 - MECÁNICO: ruedas numeradas con fondos de color (negro y rojo)
@@ -449,6 +534,8 @@ CALIDAD:
 CONFIANZA:
 - "alta": todos los dígitos son inequívocos
 - "baja": 2 o más dígitos son dudosos
+
+${ANTI_ALUCINACION}
 
 ${ES_MEDIDOR_REGLA}
 
