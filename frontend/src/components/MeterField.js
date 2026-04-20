@@ -1,5 +1,6 @@
 import React, { useRef, useState } from 'react';
 import { compressImage } from '../services/compressImage';
+import CameraCapture from './CameraCapture';
 import styles from './MeterField.module.css';
 
 const META = {
@@ -26,12 +27,11 @@ export default function MeterField({ tipo, data, onChange, onFile, isOnline = tr
   const [imgError,       setImgError]       = useState(false);
   const [sinAcceso,      setSinAcceso]      = useState(() => data.sin_acceso ? true : false);
   const [motivoAcceso,   setMotivoAcceso]   = useState(() => data.motivo_sin_acceso || '');
+  const [showCamera,     setShowCamera]     = useState(false);
   // lecturaSaved: true cuando el auditor confirmó la lectura con el botón Guardar
   const [lecturaSaved,   setLecturaSaved]   = useState(() => !!data.lectura);
 
-  const handleFile = async e => {
-    const file = e.target.files[0];
-    if (!file) return;
+  const processFile = async (file) => {
 
     onChange('preview', URL.createObjectURL(file));
     onChange('lectura', '');
@@ -51,6 +51,19 @@ export default function MeterField({ tipo, data, onChange, onFile, isOnline = tr
     // Siempre guardar local — se sube al servidor solo al presionar "Guardar visita"
     onChange('foto', fileToUpload);
     onFile?.(fileToUpload);
+  };
+
+  // Handler para <input file> (fallback)
+  const handleFile = async e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    await processFile(file);
+  };
+
+  // Handler para CameraCapture
+  const handleCameraCapture = async (file) => {
+    setShowCamera(false);
+    await processFile(file);
   };
 
   const remove = () => {
@@ -98,6 +111,14 @@ export default function MeterField({ tipo, data, onChange, onFile, isOnline = tr
   }
 
   return (
+    <>
+    {/* Visor de cámara fullscreen con control de flash */}
+    {showCamera && (
+      <CameraCapture
+        onCapture={handleCameraCapture}
+        onCancel={() => setShowCamera(false)}
+      />
+    )}
     <div className={styles.card}>
       <div className={styles.header} style={{ borderColor: meta.color }}>
         <span className={styles.emoji}>{meta.emoji}</span>
@@ -132,11 +153,11 @@ export default function MeterField({ tipo, data, onChange, onFile, isOnline = tr
               }}
             />
           )}
-          <button className={styles.removeBtn} onClick={remove}>✕ Cambiar foto</button>
+          <button className={styles.removeBtn} onClick={() => { remove(); setShowCamera(true); }}>✕ Cambiar foto</button>
         </div>
       ) : (
         <div className={styles.captureRow}>
-          <button className={styles.photoBtn} onClick={() => inputRef.current?.click()}>
+          <button className={styles.photoBtn} onClick={() => setShowCamera(true)}>
             <span>📷</span>
             <span>Tomar foto</span>
           </button>
@@ -231,5 +252,6 @@ export default function MeterField({ tipo, data, onChange, onFile, isOnline = tr
         </div>
       )}
     </div>
+    </>
   );
 }
