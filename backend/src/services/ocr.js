@@ -82,6 +82,32 @@ Señales clave: display con números rotatorios o LCD, sello de empresa de servi
 es_medidor=false ÚNICAMENTE si la imagen claramente NO contiene ningún equipo de medición: persona, animal, comida, mueble, pared vacía, vehículo, paisaje.`.trim();
 
 // ─────────────────────────────────────────────────────────────
+// Reglas de desambiguación visual — compartidas por los 6 prompts
+// ─────────────────────────────────────────────────────────────
+const AUDITORIA_VISUAL = `
+AUDITORÍA DE CONFUSIONES — aplica a cada dígito antes de confirmarlo:
+
+PARES CONFLICTIVOS:
+· 0 vs 6 → El CERO es un óvalo completamente cerrado: no tiene ninguna apertura en ningún extremo.
+           El SEIS tiene una curva ABIERTA visible en la parte superior (arco que se abre hacia arriba).
+           Si no ves una apertura clara en la parte superior → es 0, no 6.
+· 1 vs 7 → El SIETE tiene un trazo horizontal en la parte superior. Si no hay trazo horizontal → es 1.
+· 3 vs 8 → El TRES tiene la parte superior abierta (dos arcos, el de arriba abierto hacia la izquierda).
+           El OCHO es completamente cerrado (dos óvalos apilados). Si ambas mitades están cerradas → es 8.
+· 5 vs 6 → El CINCO tiene la parte inferior redondeada y la superior con un trazo recto a la izquierda.
+           El SEIS cierra en la parte inferior en un círculo completo. Si el círculo inferior está cerrado → es 6.
+
+FOTO A TRAVÉS DE VIDRIO (escenario frecuente en Colombia):
+Muchos medidores están detrás de una reja o vidrio y el auditor no puede abrirla.
+Síntomas: reflejo de la habitación superpuesto, halo o contorno doble alrededor de los dígitos,
+          reducción de contraste entre el fondo y los números.
+Regla clave: los efectos ópticos del vidrio (halos, sombras, doble contorno) NO forman parte
+             del dígito — son artefactos de la reflexión. Evalúa únicamente la FORMA ESTRUCTURAL
+             del dígito ignorando cualquier sombra o halo periférico.
+             Un óvalo con halo por reflejo sigue siendo 0. Un arco abierto con halo sigue siendo 6.
+Si la foto presenta estos síntomas, anota en la nota: "foto a través de vidrio".`.trim();
+
+// ─────────────────────────────────────────────────────────────
 // PROMPTS — Primera pasada: enumeración posición a posición L→R
 // ─────────────────────────────────────────────────────────────
 const PROMPTS_COT = {
@@ -121,12 +147,7 @@ PASO 3 — LECTURA POSICIÓN A POSICIÓN (L→R):
 
 PASO 4 — TAMBORES EN TRANSICIÓN: Si un tambor muestra dos dígitos a la vez (rueda girando entre posiciones), usa SIEMPRE el dígito inferior. Ejemplo: entre 5 y 6 visibles → escribe 5.
 
-PASO 5 — AUDITORÍA DE CONFUSIONES: Revisa cada dígito anotado contra estos pares comunes de error:
-  · ¿Es 0 o es 6? (forma cerrada vs. abierta arriba)
-  · ¿Es 1 o es 7? (con o sin trazo horizontal)
-  · ¿Es 3 o es 8? (abierto vs. cerrado arriba)
-  · ¿Es 5 o es 6? (apertura inferior)
-  Corrige si corresponde.
+${AUDITORIA_VISUAL}
 
 PASO 6 — ENSAMBLAJE: une pos 1–5 + "." + pos 6–8 → lectura final.
 
@@ -188,9 +209,7 @@ PASO 3 — LECTURA POSICIÓN A POSICIÓN (L→R):
 
 PASO 4 — TAMBORES EN TRANSICIÓN: Si un tambor muestra dos dígitos a la vez, usa el dígito INFERIOR. Si hay duda entre rojo y negro por reflejo, trátalo como NEGRO.
 
-PASO 5 — AUDITORÍA DE CONFUSIONES: Revisa cada dígito anotado:
-  · ¿Es 0 o es 6?  ·  ¿Es 1 o es 7?  ·  ¿Es 3 o es 8?  ·  ¿Es 5 o es 6?
-  Corrige si corresponde.
+${AUDITORIA_VISUAL}
 
 PASO 6 — ENSAMBLAJE: une pos 1–4 + "." + pos 5–8 → lectura final.
 
@@ -258,9 +277,7 @@ PASO 4 — LECTURA POSICIÓN A POSICIÓN (L→R):
 
 PASO 5 — TAMBORES EN TRANSICIÓN (mecánico): Si un tambor muestra dos dígitos → usa el INFERIOR.
 
-PASO 6 — AUDITORÍA DE CONFUSIONES (ambos tipos):
-  · ¿Es 0 o es 6?  ·  ¿Es 1 o es 7?  ·  ¿Es 3 o es 8?  ·  ¿Es 5 o es 6?
-  En LCD además: ¿Es 1 o es 7? ¿Es 0 o es 8?
+${AUDITORIA_VISUAL}
 
 PASO 7 — ENSAMBLAJE: une parte entera + "." + decimales → lectura final NNNNN.NNN.
 
@@ -304,15 +321,17 @@ GRUPO NEGRO — metros cúbicos (parte entera):
 1. Localiza las 5 ruedas con fondo negro en la ventanilla
 2. Para cada rueda, de izquierda a derecha, anota el dígito visible
 3. Si una rueda está girando entre dos dígitos → escribe el dígito INFERIOR
-4. Revisa cada uno: ¿confundes 0↔6? ¿1↔7? ¿3↔8? ¿5↔6? Corrige si aplica
-5. Resultado negro: d1 d2 d3 d4 d5
+4. Resultado negro provisional: d1 d2 d3 d4 d5
 
 GRUPO ROJO — decimales de m³:
-6. Localiza las 3 ruedas con fondo rojo en la ventanilla (a la derecha de las negras)
-7. Para cada rueda, de izquierda a derecha, anota el dígito visible
-8. Si una rueda está girando entre dos dígitos → escribe el dígito INFERIOR
-9. Revisa cada uno: ¿confundes 0↔6? ¿1↔7? ¿3↔8? ¿5↔6? Corrige si aplica
-10. Resultado rojo: d6 d7 d8
+5. Localiza las 3 ruedas con fondo rojo en la ventanilla (a la derecha de las negras)
+6. Para cada rueda, de izquierda a derecha, anota el dígito visible
+7. Si una rueda está girando entre dos dígitos → escribe el dígito INFERIOR
+8. Resultado rojo provisional: d6 d7 d8
+
+${AUDITORIA_VISUAL}
+
+9. Aplica la auditoría anterior a los 8 dígitos y corrige si corresponde.
 
 ENSAMBLAJE:
 11. Une: d1d2d3d4d5 + "." + d6d7d8 → formato NNNNN.NNN
@@ -348,16 +367,18 @@ GRUPO ROJO — decimales de m³ (léelos PRIMERO para anclar la posición):
 1. Localiza las 4 ruedas con fondo rojo en la ventanilla (lado derecho)
 2. Para cada rueda, de izquierda a derecha, anota el dígito visible
 3. Si una rueda está girando entre dos dígitos → escribe el dígito INFERIOR
-4. Revisa cada uno: ¿confundes 0↔6? ¿1↔7? ¿3↔8? ¿5↔6? Corrige si aplica
-5. Resultado rojo: d5 d6 d7 d8
+4. Resultado rojo provisional: d5 d6 d7 d8
 
 GRUPO NEGRO — metros cúbicos (parte entera):
-6. Localiza las 4 ruedas con fondo negro (a la izquierda de las rojas)
-7. Para cada rueda, de izquierda a derecha, anota el dígito visible
-8. Si una rueda está girando entre dos dígitos → escribe el dígito INFERIOR
-9. Si hay duda entre rojo y negro por reflejo → trátalo como NEGRO
-10. Revisa: ¿confundes 0↔6? ¿1↔7? ¿3↔8? ¿5↔6? Corrige si aplica
-11. Resultado negro: d1 d2 d3 d4
+5. Localiza las 4 ruedas con fondo negro (a la izquierda de las rojas)
+6. Para cada rueda, de izquierda a derecha, anota el dígito visible
+7. Si una rueda está girando entre dos dígitos → escribe el dígito INFERIOR
+8. Si hay duda entre rojo y negro por reflejo → trátalo como NEGRO
+9. Resultado negro provisional: d1 d2 d3 d4
+
+${AUDITORIA_VISUAL}
+
+10. Aplica la auditoría anterior a los 8 dígitos y corrige si corresponde.
 
 ENSAMBLAJE:
 12. Une: d1d2d3d4 + "." + d5d6d7d8 → formato NNNN.NNNN
@@ -397,15 +418,17 @@ GRUPO ROJO — decimales de kWh (léelos PRIMERO):
 1. Localiza las 3 ruedas con fondo rojo (lado derecho de la ventanilla)
 2. Lee cada una de izquierda a derecha
 3. Tambor entre dos dígitos → usa el INFERIOR
-4. Audita: ¿0↔6? ¿1↔7? ¿3↔8? ¿5↔6?
-5. Resultado rojo: d6 d7 d8
+4. Resultado rojo provisional: d6 d7 d8
 
 GRUPO NEGRO — kWh enteros:
-6. Localiza las 5 ruedas con fondo negro (lado izquierdo)
-7. Lee cada una de izquierda a derecha
-8. Tambor entre dos dígitos → usa el INFERIOR
-9. Audita: ¿0↔6? ¿1↔7? ¿3↔8? ¿5↔6?
-10. Resultado negro: d1 d2 d3 d4 d5
+5. Localiza las 5 ruedas con fondo negro (lado izquierdo)
+6. Lee cada una de izquierda a derecha
+7. Tambor entre dos dígitos → usa el INFERIOR
+8. Resultado negro provisional: d1 d2 d3 d4 d5
+
+${AUDITORIA_VISUAL}
+
+9. Aplica la auditoría anterior a los 8 dígitos (o a los dígitos LCD) y corrige si corresponde.
 
 ENSAMBLAJE: d1d2d3d4d5 + "." + d6d7d8 → NNNNN.NNN
 
