@@ -39,13 +39,16 @@ export default function LoginPage() {
     <div className={styles.page}>
       <InstallBanner />
       <div className={styles.center}>
-        <div className={styles.card}>
-          <div className={styles.logo}>
-            <span className={styles.logoIcon}>📊</span>
-            <h1 className={styles.logoText}>LecturIA</h1>
-            <p className={styles.subtitle}>Auditoría de Medidores</p>
+        {/* Marca sobre el card */}
+        <div className={styles.brand}>
+          <div className={styles.brandIconWrap}>
+            <span className={styles.brandIcon}>📊</span>
           </div>
+          <h1 className={styles.brandName}>LecturIA</h1>
+          <p className={styles.brandSub}>Auditoría de Medidores</p>
+        </div>
 
+        <div className={styles.card}>
           <form onSubmit={handleSubmit} className={styles.form}>
             <div className={styles.field}>
               <label>Correo electrónico</label>
