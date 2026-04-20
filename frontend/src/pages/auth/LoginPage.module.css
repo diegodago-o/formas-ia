@@ -9,58 +9,35 @@
 .center {
   flex: 1;
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
   padding: 24px;
-  gap: 0;
 }
 
-/* ── Marca sobre el card ─────────────────────────────────────── */
-.brand {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  margin-bottom: -28px;
-  z-index: 1;
-}
-
-.brandIconWrap {
-  width: 80px;
-  height: 80px;
-  background: #fff;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 8px 24px rgba(0,0,0,0.22);
-  margin-bottom: 14px;
-}
-.brandIcon { font-size: 2.8rem; line-height: 1; }
-
-.brandName {
-  font-size: 2rem;
-  font-weight: 800;
-  color: #fff;
-  margin: 0 0 4px;
-  letter-spacing: -0.02em;
-  text-shadow: 0 2px 8px rgba(0,0,0,0.25);
-}
-.brandSub {
-  font-size: 0.88rem;
-  color: rgba(255,255,255,0.75);
-  margin: 0 0 20px;
-}
-
-/* ── Card (solo formulario) ──────────────────────────────────── */
 .card {
   background: var(--surface);
   border-radius: 20px;
-  padding: 48px 32px 36px;
+  padding: 40px 32px;
   width: 100%;
   max-width: 380px;
   box-shadow: 0 20px 60px rgba(0,0,0,0.25);
 }
+
+.logo {
+  text-align: center;
+  margin-bottom: 32px;
+}
+
+.logoIcon { font-size: 3rem; display: block; margin-bottom: 8px; }
+
+.logoText {
+  font-size: 1.8rem;
+  font-weight: 700;
+  color: var(--primary);
+  margin-bottom: 4px;
+}
+
+.subtitle { color: var(--text-muted); font-size: 0.9rem; }
 
 .form { display: flex; flex-direction: column; gap: 18px; }
 
