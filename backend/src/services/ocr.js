@@ -82,169 +82,362 @@ Señales clave: display con números rotatorios o LCD, sello de empresa de servi
 es_medidor=false ÚNICAMENTE si la imagen claramente NO contiene ningún equipo de medición: persona, animal, comida, mueble, pared vacía, vehículo, paisaje.`.trim();
 
 // ─────────────────────────────────────────────────────────────
-// PROMPTS — Primera pasada con enumeración dígito a dígito
+// PROMPTS — Primera pasada: enumeración posición a posición L→R
 // ─────────────────────────────────────────────────────────────
 const PROMPTS_COT = {
 
-  gas: `Eres un experto en lectura de medidores de gas domiciliario en Colombia.
+  gas: `Eres experto en lectura de medidores de gas domiciliario en Colombia.
 
-TAREA: Lee el display de tambores giratorios y extrae la lectura.
+OBJETIVO: Extraer la lectura del display de tambores giratorios con precisión absoluta.
 
-DISPLAY: ventanilla rectangular con 8 posiciones totales.
-- Posiciones 1-5 dígitos NEGROS = metros cúbicos (parte entera)
-- Posiciones 6-8 dígitos ROJOS = decimales
-- Formato obligatorio: NNNNN.NNN  (ej: 00201.655)
+ANATOMÍA DEL DISPLAY:
+- Ventanilla rectangular ubicada en la parte frontal superior del medidor
+- Exactamente 8 ruedas numeradas visibles de izquierda a derecha
+- Ruedas 1–5 (fondo NEGRO): metros cúbicos — parte entera
+- Ruedas 6–8 (fondo ROJO): decimales de m³
+- Formato de salida: NNNNN.NNN  (ejemplo: 00201.655)
 
-MÉTODO — sigue estos pasos en orden:
-1. Localiza la ventanilla (ignora número de serie en el cuerpo, stickers, etiqueta amarilla de apartamento)
-2. Cuenta las 8 posiciones de izquierda a derecha
-3. Anota cada dígito individualmente en "digitos_individuales" (ej: "0,0,2,0,1 | 6,5,5")
-4. Si un tambor queda entre dos dígitos → usa el INFERIOR (entre 5 y 6 → escribe 5)
-5. Confusiones frecuentes: examina con cuidado 0↔6, 1↔7, 3↔8, 5↔6 antes de decidir
-6. Combina: los 5 primeros + punto + los 3 últimos
+ELEMENTOS A IGNORAR — no forman parte de la lectura:
+- Número de serie grabado o estampado en el cuerpo metálico del medidor
+- Stickers de apartamento (etiquetas amarillas, blancas o de papel)
+- Placa de identificación de la empresa de gas
+- Cualquier número impreso fuera de la ventanilla de tambores
 
-CONFIANZA: "alta" si los 8 dígitos son claros. "baja" si 2 o más son dudosos.
-CALIDAD: "buena" / "aceptable" (reflejo, poca luz) / "mala" (ilegible).
-Si calidad es "aceptable" o "mala", incluye "motivo_calidad" con frase corta.
+PROTOCOLO OBLIGATORIO — ejecuta cada paso en orden y documenta:
+
+PASO 1 — LOCALIZACIÓN: Identifica la ventanilla rectangular con los 8 tambores. Confirma que NO estás mirando el número de serie del cuerpo.
+
+PASO 2 — CONTEO: Cuenta las ruedas visibles de izquierda a derecha. Confirma que hay exactamente 8 (si ves menos, indica cuántas en la nota).
+
+PASO 3 — LECTURA POSICIÓN A POSICIÓN (L→R):
+  · Pos 1 (negro): ¿qué dígito ves? → anota
+  · Pos 2 (negro): ¿qué dígito ves? → anota
+  · Pos 3 (negro): ¿qué dígito ves? → anota
+  · Pos 4 (negro): ¿qué dígito ves? → anota
+  · Pos 5 (negro): ¿qué dígito ves? → anota
+  · Pos 6 (rojo):  ¿qué dígito ves? → anota
+  · Pos 7 (rojo):  ¿qué dígito ves? → anota
+  · Pos 8 (rojo):  ¿qué dígito ves? → anota
+
+PASO 4 — TAMBORES EN TRANSICIÓN: Si un tambor muestra dos dígitos a la vez (rueda girando entre posiciones), usa SIEMPRE el dígito inferior. Ejemplo: entre 5 y 6 visibles → escribe 5.
+
+PASO 5 — AUDITORÍA DE CONFUSIONES: Revisa cada dígito anotado contra estos pares comunes de error:
+  · ¿Es 0 o es 6? (forma cerrada vs. abierta arriba)
+  · ¿Es 1 o es 7? (con o sin trazo horizontal)
+  · ¿Es 3 o es 8? (abierto vs. cerrado arriba)
+  · ¿Es 5 o es 6? (apertura inferior)
+  Corrige si corresponde.
+
+PASO 6 — ENSAMBLAJE: une pos 1–5 + "." + pos 6–8 → lectura final.
+
+CALIDAD DE FOTO:
+- "buena": display completamente nítido, sin reflejos, dígitos inequívocos
+- "aceptable": reflejo leve, poca luz o ángulo oblicuo, pero dígitos legibles
+- "mala": desenfocado, muy oscuro, ilegible — lectura imposible o muy dudosa
+Si no es "buena", añade motivo_calidad (frase corta: "reflejo en la ventanilla", "desenfocado", etc.).
+
+CONFIANZA:
+- "alta": los 8 dígitos son inequívocos después de la auditoría
+- "baja": 2 o más dígitos siguen siendo dudosos tras la auditoría
 
 ${ES_MEDIDOR_REGLA}
 
-Responde SOLO con este JSON (sin texto adicional):
+Responde SOLO con este JSON (sin texto previo ni posterior):
 {
   "es_medidor": true,
   "digitos_individuales": "0,0,2,0,1 | 6,5,5",
   "lectura": "00201.655",
   "confianza": "alta",
   "calidad_foto": "buena",
-  "nota": "frase describiendo el display y los dígitos vistos"
+  "motivo_calidad": null,
+  "nota": "descripción breve de lo observado en la ventanilla y los dígitos leídos"
 }`,
 
-  agua: `Eres un experto en lectura de medidores de agua domiciliario en Colombia.
+  agua: `Eres experto en lectura de medidores de agua domiciliario en Colombia.
 
-TAREA: Lee el display de tambores giratorios y extrae la lectura.
+OBJETIVO: Extraer la lectura del display de tambores giratorios con precisión absoluta.
 
-DISPLAY: ventanilla ovalada o rectangular con 8 posiciones totales.
-- Posiciones 1-4 dígitos NEGROS = metros cúbicos (parte entera)
-- Posiciones 5-8 dígitos ROJOS = decimales
-- Formato obligatorio: NNNN.NNNN  (ej: 0134.8423)
+ANATOMÍA DEL DISPLAY:
+- Ventanilla ovalada o rectangular en la parte frontal del medidor (carcasa azul o gris)
+- Exactamente 8 ruedas numeradas visibles de izquierda a derecha
+- Ruedas 1–4 (fondo NEGRO): metros cúbicos — parte entera
+- Ruedas 5–8 (fondo ROJO): decimales de m³
+- Formato de salida: NNNN.NNNN  (ejemplo: 0134.8423)
 
-MÉTODO — sigue estos pasos en orden:
-1. Localiza la ventanilla del frente (carcasa generalmente azul o gris)
-2. Ignora el número de serie grabado en el metal del cuerpo — NO es la lectura
-3. Cuenta las 8 posiciones de izquierda a derecha
-4. Anota cada dígito individualmente en "digitos_individuales" (ej: "0,1,3,4 | 8,4,2,3")
-5. Si un tambor queda entre dos dígitos → usa el INFERIOR
-6. Si hay duda entre rojo y negro por reflejo → trátalo como NEGRO
-7. Confusiones frecuentes: examina 0↔6, 1↔7, 3↔8, 5↔6 antes de decidir
+ELEMENTOS A IGNORAR — no forman parte de la lectura:
+- Número de serie grabado o troquelado en el metal del cuerpo (puede parecer una lectura pero NO lo es)
+- Marca del fabricante (ACTARIS, Itron, Sensus, ISOIL, etc.)
+- Stickers de apartamento o de empresa de acueducto
+- Cualquier número impreso fuera de la ventanilla de tambores
 
-CONFIANZA: "alta" si los 8 dígitos son claros. "baja" si 2 o más son dudosos.
-CALIDAD: "buena" / "aceptable" / "mala".
-Si calidad es "aceptable" o "mala", incluye "motivo_calidad" con frase corta.
+PROTOCOLO OBLIGATORIO — ejecuta cada paso en orden y documenta:
+
+PASO 1 — LOCALIZACIÓN: Identifica la ventanilla con los 8 tambores en el frente del medidor. Distingue la ventanilla del número de serie del cuerpo.
+
+PASO 2 — CONTEO: Cuenta las ruedas de izquierda a derecha. Confirma exactamente 8.
+
+PASO 3 — LECTURA POSICIÓN A POSICIÓN (L→R):
+  · Pos 1 (negro): ¿qué dígito ves? → anota
+  · Pos 2 (negro): ¿qué dígito ves? → anota
+  · Pos 3 (negro): ¿qué dígito ves? → anota
+  · Pos 4 (negro): ¿qué dígito ves? → anota
+  · Pos 5 (rojo):  ¿qué dígito ves? → anota
+  · Pos 6 (rojo):  ¿qué dígito ves? → anota
+  · Pos 7 (rojo):  ¿qué dígito ves? → anota
+  · Pos 8 (rojo):  ¿qué dígito ves? → anota
+
+PASO 4 — TAMBORES EN TRANSICIÓN: Si un tambor muestra dos dígitos a la vez, usa el dígito INFERIOR. Si hay duda entre rojo y negro por reflejo, trátalo como NEGRO.
+
+PASO 5 — AUDITORÍA DE CONFUSIONES: Revisa cada dígito anotado:
+  · ¿Es 0 o es 6?  ·  ¿Es 1 o es 7?  ·  ¿Es 3 o es 8?  ·  ¿Es 5 o es 6?
+  Corrige si corresponde.
+
+PASO 6 — ENSAMBLAJE: une pos 1–4 + "." + pos 5–8 → lectura final.
+
+CALIDAD DE FOTO:
+- "buena": display completamente nítido, dígitos inequívocos
+- "aceptable": reflejo leve, poca luz o ángulo oblicuo, pero legible
+- "mala": ilegible — lectura imposible o muy dudosa
+Si no es "buena", añade motivo_calidad breve.
+
+CONFIANZA:
+- "alta": los 8 dígitos son inequívocos después de la auditoría
+- "baja": 2 o más dígitos siguen siendo dudosos
 
 ${ES_MEDIDOR_REGLA}
 
-Responde SOLO con este JSON (sin texto adicional):
+Responde SOLO con este JSON (sin texto previo ni posterior):
 {
   "es_medidor": true,
   "digitos_individuales": "0,1,3,4 | 8,4,2,3",
   "lectura": "0134.8423",
   "confianza": "alta",
   "calidad_foto": "buena",
-  "nota": "frase describiendo el display y los dígitos vistos"
+  "motivo_calidad": null,
+  "nota": "descripción breve de lo observado en la ventanilla y los dígitos leídos"
 }`,
 
-  luz: `Eres un experto en lectura de medidores de energía eléctrica domiciliario en Colombia.
+  luz: `Eres experto en lectura de medidores de energía eléctrica domiciliario en Colombia.
 
-TAREA: Lee el display del medidor (tambores mecánicos o LCD digital) y extrae la lectura.
+OBJETIVO: Extraer la lectura del display del medidor (tambores mecánicos o pantalla LCD) con precisión absoluta.
 
-DISPLAY: 8 posiciones totales.
-- Posiciones 1-5 = parte entera (kWh)
-- Posiciones 6-8 = decimales (rojos en mecánico, o después del separador en LCD)
-- Formato obligatorio: NNNNN.NNN  (ej: 00452.123)
+ANATOMÍA DEL DISPLAY — dos tipos posibles:
 
-MÉTODO — sigue estos pasos en orden:
-1. Identifica el tipo de display: mecánico (tambores) o LCD (pantalla digital)
-2. Localiza las 8 posiciones (ignora número de serie, marca, stickers de empresa)
-3. Anota cada dígito individualmente en "digitos_individuales" (ej: "0,0,4,5,2 | 1,2,3")
-4. Si es mecánico y un tambor queda entre dos dígitos → usa el INFERIOR
-5. Confusiones frecuentes: examina 0↔6, 1↔7, 3↔8, 5↔6 antes de decidir
-6. En LCD: lee exactamente los dígitos visibles sin inventar posiciones
+TIPO A — MECÁNICO (tambores giratorios):
+- Ventanilla rectangular con 8 ruedas numeradas de izquierda a derecha
+- Ruedas 1–5 (fondo NEGRO): kWh — parte entera
+- Ruedas 6–8 (fondo ROJO): decimales de kWh
+- Formato: NNNNN.NNN  (ejemplo: 00452.123)
 
-CONFIANZA: "alta" si los 8 dígitos son claros. "baja" si 2 o más son dudosos.
-CALIDAD: "buena" / "aceptable" / "mala".
-Si calidad es "aceptable" o "mala", incluye "motivo_calidad" con frase corta.
+TIPO B — LCD (pantalla digital):
+- Pantalla plana con dígitos iluminados
+- Los decimales aparecen después de un punto (.) o coma (,) en la pantalla
+- Lee exactamente los dígitos que muestra la pantalla; no inventes posiciones
+- Formato: NNNNN.NNN
+
+ELEMENTOS A IGNORAR en ambos tipos:
+- Número de serie grabado o impreso en el cuerpo del medidor
+- Marca/modelo (EDMI, Landis+Gyr, ABB, Circutor, ZIV, etc.)
+- Stickers de empresa eléctrica, sellos de calibración
+- Números de tarifa o de circuito impresos alrededor del display
+
+PROTOCOLO OBLIGATORIO — ejecuta cada paso en orden y documenta:
+
+PASO 1 — TIPO DE DISPLAY: ¿Mecánico (tambores) o LCD (pantalla)?
+
+PASO 2 — LOCALIZACIÓN: Identifica la ventanilla (mecánico) o la pantalla (LCD). Descarta número de serie.
+
+PASO 3 — CONTEO: Confirma 8 posiciones (mecánico) o cuenta los dígitos visibles antes y después del separador (LCD).
+
+PASO 4 — LECTURA POSICIÓN A POSICIÓN (L→R):
+  Mecánico:
+    · Pos 1 (negro) · Pos 2 (negro) · Pos 3 (negro) · Pos 4 (negro) · Pos 5 (negro)
+    · Pos 6 (rojo)  · Pos 7 (rojo)  · Pos 8 (rojo)
+  LCD:
+    · Lee los dígitos de izquierda a derecha, identifica el separador decimal
+
+PASO 5 — TAMBORES EN TRANSICIÓN (mecánico): Si un tambor muestra dos dígitos → usa el INFERIOR.
+
+PASO 6 — AUDITORÍA DE CONFUSIONES (ambos tipos):
+  · ¿Es 0 o es 6?  ·  ¿Es 1 o es 7?  ·  ¿Es 3 o es 8?  ·  ¿Es 5 o es 6?
+  En LCD además: ¿Es 1 o es 7? ¿Es 0 o es 8?
+
+PASO 7 — ENSAMBLAJE: une parte entera + "." + decimales → lectura final NNNNN.NNN.
+
+CALIDAD DE FOTO:
+- "buena": display completamente nítido, dígitos inequívocos
+- "aceptable": reflejo leve, poca luz o ángulo oblicuo, pero legible
+- "mala": ilegible — lectura imposible o muy dudosa
+Si no es "buena", añade motivo_calidad breve.
+
+CONFIANZA:
+- "alta": todos los dígitos son inequívocos después de la auditoría
+- "baja": 2 o más dígitos siguen siendo dudosos
 
 ${ES_MEDIDOR_REGLA}
 
-Responde SOLO con este JSON (sin texto adicional):
+Responde SOLO con este JSON (sin texto previo ni posterior):
 {
   "es_medidor": true,
   "digitos_individuales": "0,0,4,5,2 | 1,2,3",
   "lectura": "00452.123",
   "confianza": "alta",
   "calidad_foto": "buena",
-  "nota": "frase describiendo tipo de display y dígitos vistos"
+  "motivo_calidad": null,
+  "nota": "tipo de display y descripción breve de los dígitos leídos"
 }`,
 };
 
 // ─────────────────────────────────────────────────────────────
-// PROMPTS — Segunda pasada independiente (sin sesgo de la primera)
+// PROMPTS — Segunda pasada: enfoque por grupos de color (ángulo independiente)
+// Misma metodología, distinto punto de entrada → sin sesgo de la primera pasada
 // ─────────────────────────────────────────────────────────────
 const PROMPTS_VERIFICACION = {
 
-  gas: `Analiza esta imagen de un medidor de gas. Lee la ventanilla de tambores giratorios.
-NO leas el número de serie del cuerpo metálico, stickers ni etiquetas.
+  gas: `Analiza esta imagen de un medidor de gas domiciliario colombiano.
 
-Pasos obligatorios:
-1. Cuenta las posiciones de la ventanilla (deben ser 8: 5 negras + 3 rojas)
-2. Lee cada posición de izquierda a derecha y anótala en "digitos_individuales"
-3. Si un tambor está entre dos dígitos → toma el inferior
-4. Revisa posibles confusiones: 0↔6, 1↔7, 3↔8, 5↔6
-5. Formato final: NNNNN.NNN
+CONTEXTO: La lectura se extrae de la ventanilla de tambores giratorios, NO del número de serie del cuerpo metálico ni de stickers o etiquetas.
 
-Responde ÚNICAMENTE con JSON:
+MÉTODO — lee por grupos de color (no de izquierda a derecha):
+
+GRUPO NEGRO — metros cúbicos (parte entera):
+1. Localiza las 5 ruedas con fondo negro en la ventanilla
+2. Para cada rueda, de izquierda a derecha, anota el dígito visible
+3. Si una rueda está girando entre dos dígitos → escribe el dígito INFERIOR
+4. Revisa cada uno: ¿confundes 0↔6? ¿1↔7? ¿3↔8? ¿5↔6? Corrige si aplica
+5. Resultado negro: d1 d2 d3 d4 d5
+
+GRUPO ROJO — decimales de m³:
+6. Localiza las 3 ruedas con fondo rojo en la ventanilla (a la derecha de las negras)
+7. Para cada rueda, de izquierda a derecha, anota el dígito visible
+8. Si una rueda está girando entre dos dígitos → escribe el dígito INFERIOR
+9. Revisa cada uno: ¿confundes 0↔6? ¿1↔7? ¿3↔8? ¿5↔6? Corrige si aplica
+10. Resultado rojo: d6 d7 d8
+
+ENSAMBLAJE:
+11. Une: d1d2d3d4d5 + "." + d6d7d8 → formato NNNNN.NNN
+
+CALIDAD:
+- "buena" / "aceptable" / "mala"
+- Si no es "buena", añade motivo_calidad breve
+
+CONFIANZA:
+- "alta": todos los dígitos son inequívocos
+- "baja": 2 o más dígitos son dudosos
+
+${ES_MEDIDOR_REGLA}
+
+Responde ÚNICAMENTE con JSON (sin texto previo ni posterior):
 {
+  "es_medidor": true,
+  "digitos_individuales": "d1,d2,d3,d4,d5 | d6,d7,d8",
   "lectura": "NNNNN.NNN o null si ilegible",
   "confianza": "alta | baja",
-  "digitos_individuales": "d1,d2,d3,d4,d5 | d6,d7,d8",
-  "nota": "qué viste exactamente en cada posición"
+  "calidad_foto": "buena | aceptable | mala",
+  "motivo_calidad": null,
+  "nota": "qué viste en el grupo negro y qué en el grupo rojo"
 }`,
 
-  agua: `Analiza esta imagen de un medidor de agua. Lee la ventanilla de tambores giratorios.
-El número de serie en el metal del cuerpo NO es la lectura — ignóralo completamente.
+  agua: `Analiza esta imagen de un medidor de agua domiciliario colombiano (carcasa azul o gris).
 
-Pasos obligatorios:
-1. Cuenta las posiciones de la ventanilla (deben ser 8: 4 negras + 4 rojas)
-2. Lee cada posición de izquierda a derecha y anótala en "digitos_individuales"
-3. Si un tambor está entre dos dígitos → toma el inferior
-4. Revisa posibles confusiones: 0↔6, 1↔7, 3↔8, 5↔6
-5. Formato final: NNNN.NNNN
+CONTEXTO: La lectura se extrae de la ventanilla de tambores giratorios del frente del medidor. El número de serie grabado en el metal del cuerpo NO es la lectura — ignóralo por completo.
 
-Responde ÚNICAMENTE con JSON:
+MÉTODO — lee por grupos de color (no de izquierda a derecha):
+
+GRUPO ROJO — decimales de m³ (léelos PRIMERO para anclar la posición):
+1. Localiza las 4 ruedas con fondo rojo en la ventanilla (lado derecho)
+2. Para cada rueda, de izquierda a derecha, anota el dígito visible
+3. Si una rueda está girando entre dos dígitos → escribe el dígito INFERIOR
+4. Revisa cada uno: ¿confundes 0↔6? ¿1↔7? ¿3↔8? ¿5↔6? Corrige si aplica
+5. Resultado rojo: d5 d6 d7 d8
+
+GRUPO NEGRO — metros cúbicos (parte entera):
+6. Localiza las 4 ruedas con fondo negro (a la izquierda de las rojas)
+7. Para cada rueda, de izquierda a derecha, anota el dígito visible
+8. Si una rueda está girando entre dos dígitos → escribe el dígito INFERIOR
+9. Si hay duda entre rojo y negro por reflejo → trátalo como NEGRO
+10. Revisa: ¿confundes 0↔6? ¿1↔7? ¿3↔8? ¿5↔6? Corrige si aplica
+11. Resultado negro: d1 d2 d3 d4
+
+ENSAMBLAJE:
+12. Une: d1d2d3d4 + "." + d5d6d7d8 → formato NNNN.NNNN
+
+CALIDAD:
+- "buena" / "aceptable" / "mala"
+- Si no es "buena", añade motivo_calidad breve
+
+CONFIANZA:
+- "alta": todos los dígitos son inequívocos
+- "baja": 2 o más dígitos son dudosos
+
+${ES_MEDIDOR_REGLA}
+
+Responde ÚNICAMENTE con JSON (sin texto previo ni posterior):
 {
+  "es_medidor": true,
+  "digitos_individuales": "d1,d2,d3,d4 | d5,d6,d7,d8",
   "lectura": "NNNN.NNNN o null si ilegible",
   "confianza": "alta | baja",
-  "digitos_individuales": "d1,d2,d3,d4 | d5,d6,d7,d8",
-  "nota": "qué viste exactamente en la ventanilla"
+  "calidad_foto": "buena | aceptable | mala",
+  "motivo_calidad": null,
+  "nota": "qué viste en el grupo rojo y qué en el grupo negro"
 }`,
 
-  luz: `Analiza esta imagen de un medidor de electricidad. Lee el display (mecánico o LCD).
-Ignora número de serie, stickers y texto de marca.
+  luz: `Analiza esta imagen de un medidor de electricidad domiciliario colombiano.
 
-Pasos obligatorios:
-1. Identifica tipo: mecánico (tambores) o LCD (pantalla digital)
-2. Cuenta las posiciones (deben ser 8: 5 enteros + 3 decimales)
-3. Lee cada posición de izquierda a derecha y anótala en "digitos_individuales"
-4. Si es mecánico y tambor entre dos dígitos → toma el inferior
-5. Revisa posibles confusiones: 0↔6, 1↔7, 3↔8, 5↔6
-6. Formato final: NNNNN.NNN
+CONTEXTO: Lee el display del medidor (tambores mecánicos o pantalla LCD). Ignora el número de serie del cuerpo, la marca y los stickers de la empresa eléctrica.
 
-Responde ÚNICAMENTE con JSON:
+PASO PREVIO — IDENTIFICA EL TIPO DE DISPLAY:
+- MECÁNICO: ruedas numeradas con fondos de color (negro y rojo)
+- LCD: pantalla digital plana con números iluminados
+
+━━━ SI ES MECÁNICO — lee por grupos de color ━━━
+
+GRUPO ROJO — decimales de kWh (léelos PRIMERO):
+1. Localiza las 3 ruedas con fondo rojo (lado derecho de la ventanilla)
+2. Lee cada una de izquierda a derecha
+3. Tambor entre dos dígitos → usa el INFERIOR
+4. Audita: ¿0↔6? ¿1↔7? ¿3↔8? ¿5↔6?
+5. Resultado rojo: d6 d7 d8
+
+GRUPO NEGRO — kWh enteros:
+6. Localiza las 5 ruedas con fondo negro (lado izquierdo)
+7. Lee cada una de izquierda a derecha
+8. Tambor entre dos dígitos → usa el INFERIOR
+9. Audita: ¿0↔6? ¿1↔7? ¿3↔8? ¿5↔6?
+10. Resultado negro: d1 d2 d3 d4 d5
+
+ENSAMBLAJE: d1d2d3d4d5 + "." + d6d7d8 → NNNNN.NNN
+
+━━━ SI ES LCD — lee por secciones del separador ━━━
+
+1. Localiza el separador decimal (punto o coma en la pantalla)
+2. Lee los dígitos a la DERECHA del separador (decimales): anótalos → parte decimal
+3. Lee los dígitos a la IZQUIERDA del separador (enteros): anótalos → parte entera
+4. Ajusta con ceros a la izquierda si la parte entera tiene menos de 5 dígitos
+5. Audita: ¿0↔8? ¿1↔7? ¿3↔8? en display LCD
+
+ENSAMBLAJE: parte entera (5 dígitos) + "." + parte decimal (3 dígitos) → NNNNN.NNN
+
+CALIDAD:
+- "buena" / "aceptable" / "mala"
+- Si no es "buena", añade motivo_calidad breve
+
+CONFIANZA:
+- "alta": todos los dígitos son inequívocos
+- "baja": 2 o más dígitos son dudosos
+
+${ES_MEDIDOR_REGLA}
+
+Responde ÚNICAMENTE con JSON (sin texto previo ni posterior):
 {
+  "es_medidor": true,
+  "digitos_individuales": "d1,d2,d3,d4,d5 | d6,d7,d8",
   "lectura": "NNNNN.NNN o null si ilegible",
   "confianza": "alta | baja",
-  "digitos_individuales": "d1,d2,d3,d4,d5 | d6,d7,d8",
-  "nota": "tipo de display y qué viste en cada posición"
+  "calidad_foto": "buena | aceptable | mala",
+  "motivo_calidad": null,
+  "nota": "tipo de display y qué viste en cada grupo"
 }`,
 };
 
