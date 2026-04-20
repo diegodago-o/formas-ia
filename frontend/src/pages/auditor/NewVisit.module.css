@@ -96,6 +96,12 @@
   border-radius: var(--radius-sm);
   padding: 10px 14px;
   border-left: 3px solid #EF4444;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.lecturaRequeridaAlert span::before {
+  content: '⚠️ ';
 }
 
 .summary {

@@ -305,16 +305,24 @@ export default function NewVisit() {
     setMedidores(prev => ({ ...prev, [tipo]: { ...prev[tipo], foto_file: file, foto_base64: base64 } }));
   };
 
-  // Medidores con foto pero sin lectura confirmada con el botón ✓ (obligatorio)
-  const medidoresSinLectura = ['luz', 'agua', 'gas'].filter(t => {
+  // Estado de cada medidor
+  const estadoMedidor = (t) => {
     const m = medidores[t];
     const tieneFoto = m.foto_file || m.foto_path || m.foto_base64 || m.preview;
-    return tieneFoto && !m.sin_acceso && !(m.lectura && m.lectura_guardada);
-  });
+    if (m.sin_acceso)                          return 'sinAcceso';   // ✓ OK
+    if (tieneFoto && m.lectura && m.lectura_guardada) return 'completo'; // ✓ OK
+    if (tieneFoto && !(m.lectura && m.lectura_guardada)) return 'sinLectura'; // foto sin lectura confirmada
+    return 'pendiente'; // sin foto y sin sin_acceso
+  };
+
+  // Medidores incompletos (cualquier razón)
+  const medidoresPendientes = ['luz', 'agua', 'gas'].filter(
+    t => !['completo', 'sinAcceso'].includes(estadoMedidor(t))
+  );
 
   const canNext = () => {
     if (step === 0) return ciudadId && conjuntoId && apartamento.trim() && latitud;
-    if (step === 1) return medidoresSinLectura.length === 0;
+    if (step === 1) return medidoresPendientes.length === 0;
     return true;
   };
 
@@ -708,9 +716,15 @@ export default function NewVisit() {
             </p>
           )}
 
-          {medidoresSinLectura.length > 0 && (
+          {medidoresPendientes.length > 0 && (
             <div className={styles.lecturaRequeridaAlert}>
-              ⚠️ Debes ingresar la lectura en: <strong>{medidoresSinLectura.join(', ')}</strong>
+              {medidoresPendientes.map(t => {
+                const estado = estadoMedidor(t);
+                const nombre = t === 'luz' ? '⚡ Luz' : t === 'agua' ? '💧 Agua' : '🔥 Gas';
+                if (estado === 'pendiente')   return <span key={t}>{nombre}: falta foto o marcar sin evidencia</span>;
+                if (estado === 'sinLectura')  return <span key={t}>{nombre}: escribe la lectura y presiona ✓</span>;
+                return null;
+              })}
             </div>
           )}
 
@@ -720,7 +734,7 @@ export default function NewVisit() {
               tipo={tipo}
               data={medidores[tipo]}
               isOnline={online}
-              lecturaRequerida={medidoresSinLectura.includes(tipo)}
+              lecturaRequerida={estadoMedidor(tipo) === 'sinLectura'}
               onChange={(field, val) => updateMedidor(tipo, field, val)}
               onFile={file => handleMedidorFile(tipo, file)}
             />
