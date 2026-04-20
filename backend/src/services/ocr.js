@@ -13,10 +13,10 @@ const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4o';
 // ─────────────────────────────────────────────────────────────
 // ─────────────────────────────────────────────────────────────
 // Detección de blur — varianza del Laplaciano sobre imagen original
-// Umbral configurable: OCR_BLUR_THRESHOLD (default 60)
+// Umbral configurable: OCR_BLUR_THRESHOLD (default 30)
 // Imágenes muy borrosas nunca llegan a la IA
 // ─────────────────────────────────────────────────────────────
-const BLUR_THRESHOLD = parseInt(process.env.OCR_BLUR_THRESHOLD || '60', 10);
+const BLUR_THRESHOLD = parseInt(process.env.OCR_BLUR_THRESHOLD || '30', 10);
 
 async function calcularNitidez(imagePath) {
   try {

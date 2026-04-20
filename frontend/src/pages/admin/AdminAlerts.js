@@ -266,9 +266,21 @@ export default function AdminAlerts() {
                               {a.nota_ocr && (
                                 <p className={styles.alertBoxNota}>"{a.nota_ocr}"</p>
                               )}
-                              <p className={styles.alertBoxDesc}>
-                                Ingresa la lectura correcta revisando la foto, o rechaza para que el auditor retome la foto.
-                              </p>
+                              {a.lectura_confirmada ? (
+                                <>
+                                  <div className={styles.auditorLecturaBox}>
+                                    <span className={styles.auditorLecturaLabel}>📋 Lectura registrada por el auditor:</span>
+                                    <code className={styles.auditorLecturaVal}>{a.lectura_confirmada}</code>
+                                  </div>
+                                  <p className={styles.alertBoxDesc}>
+                                    Confirma la lectura del auditor revisando la foto, corrígela si es necesario, o rechaza para que retome la foto.
+                                  </p>
+                                </>
+                              ) : (
+                                <p className={styles.alertBoxDesc}>
+                                  Ingresa la lectura correcta revisando la foto, o rechaza para que el auditor retome la foto.
+                                </p>
+                              )}
                             </div>
                           )}
 
@@ -367,11 +379,20 @@ export default function AdminAlerts() {
                               {/* Sin detección */}
                               {sinDet && (
                                 <>
+                                  {a.lectura_confirmada && (
+                                    <button
+                                      className={styles.btnConfirmar}
+                                      onClick={() => resolver(a.medidor_id, 'aprobado', a.lectura_confirmada)}
+                                      disabled={saving}
+                                    >
+                                      ✓ Confirmar lectura auditor
+                                    </button>
+                                  )}
                                   <button
                                     className={styles.btnCorregir}
-                                    onClick={() => { setEditing(a.medidor_id); setNewVal(''); }}
+                                    onClick={() => { setEditing(a.medidor_id); setNewVal(a.lectura_confirmada || ''); }}
                                   >
-                                    📝 Ingresar lectura
+                                    📝 {a.lectura_confirmada ? 'Corregir' : 'Ingresar lectura'}
                                   </button>
                                   <button
                                     className={styles.btnRechazar}

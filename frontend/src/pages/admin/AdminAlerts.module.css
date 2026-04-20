@@ -337,6 +337,31 @@
   line-height: 1.5;
 }
 
+/* Lectura del auditor en sinDet */
+.auditorLecturaBox {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(255,255,255,0.7);
+  border-radius: 8px;
+  padding: 8px 12px;
+  flex-wrap: wrap;
+}
+.auditorLecturaLabel {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #374151;
+}
+.auditorLecturaVal {
+  font-size: 1.1rem;
+  font-weight: 800;
+  color: #059669;
+  background: #D1FAE5;
+  padding: 3px 10px;
+  border-radius: 6px;
+  letter-spacing: 0.5px;
+}
+
 /* ── Sección de lecturas ─────────────────────────────────────── */
 .lecturas {
   padding: 12px 14px 0;
