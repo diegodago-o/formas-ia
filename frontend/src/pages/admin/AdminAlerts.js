@@ -53,9 +53,8 @@ export default function AdminAlerts() {
     api.get('/admin/alerts')
       .then(r => {
         setAlerts(r.data);
-        // Abrir todos los grupos por defecto
-        const ids = new Set([...new Set(r.data.map(a => a.visita_id))]);
-        setOpenVisits(ids);
+        // Todos los acordeones cerrados por defecto
+        setOpenVisits(new Set());
       })
       .finally(() => setLoading(false));
   };
