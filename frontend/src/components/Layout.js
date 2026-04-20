@@ -38,6 +38,9 @@ export default function Layout({ children, title, back }) {
       {/* Contenido */}
       <main className={styles.main}>{children}</main>
 
+      {/* Footer */}
+      <footer className={styles.footer}>Desarrollado por Tecnofactory SAS</footer>
+
       {/* Bottom nav (solo auditor) */}
       {user?.rol === 'auditor' && (
         <nav className={styles.bottomNav}>

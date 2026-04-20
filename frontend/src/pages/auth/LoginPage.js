@@ -79,6 +79,7 @@ export default function LoginPage() {
           </form>
         </div>
       </div>
+      <p className={styles.brand}>Desarrollado por Tecnofactory SAS</p>
     </div>
   );
 }

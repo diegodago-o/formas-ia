@@ -39,6 +39,14 @@
 
 .subtitle { color: var(--text-muted); font-size: 0.9rem; }
 
+.brand {
+  text-align: center;
+  font-size: 0.72rem;
+  color: rgba(255,255,255,0.45);
+  margin: 16px 0 12px;
+  letter-spacing: 0.03em;
+}
+
 .form { display: flex; flex-direction: column; gap: 18px; }
 
 .field { display: flex; flex-direction: column; gap: 6px; }

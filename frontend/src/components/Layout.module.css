@@ -66,6 +66,15 @@
   overflow-y: auto;
 }
 
+.footer {
+  text-align: center;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  padding: 8px 16px 6px;
+  opacity: 0.6;
+  letter-spacing: 0.02em;
+}
+
 .bottomNav {
   position: fixed;
   bottom: 0;
