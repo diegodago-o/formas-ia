@@ -11,6 +11,35 @@ const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4o';
 // ─────────────────────────────────────────────────────────────
 // Preprocesamiento de imagen con Sharp
 // ─────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────
+// Detección de blur — varianza del Laplaciano sobre imagen original
+// Umbral configurable: OCR_BLUR_THRESHOLD (default 60)
+// Imágenes muy borrosas nunca llegan a la IA
+// ─────────────────────────────────────────────────────────────
+const BLUR_THRESHOLD = parseInt(process.env.OCR_BLUR_THRESHOLD || '60', 10);
+
+async function calcularNitidez(imagePath) {
+  try {
+    const { data } = await sharp(imagePath)
+      .grayscale()
+      .resize(512, 512, { fit: 'inside', withoutEnlargement: true })
+      .convolve({ width: 3, height: 3, kernel: [0, -1, 0, -1, 4, -1, 0, -1, 0] })
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+
+    const pixels = new Uint8Array(data);
+    const n = pixels.length;
+    let sum = 0;
+    for (let i = 0; i < n; i++) sum += pixels[i];
+    const mean = sum / n;
+    let variance = 0;
+    for (let i = 0; i < n; i++) variance += (pixels[i] - mean) ** 2;
+    return variance / n;
+  } catch (e) {
+    return 999; // si falla el cálculo, dejar pasar a la IA
+  }
+}
+
 async function preprocessImage(inputPath) {
   const tmpPath = path.join(
     os.tmpdir(),
@@ -562,6 +591,22 @@ async function analizarMedidor(imagePath, tipo, { modo = 'rapido' } = {}) {
       es_medidor: true, lectura: null, confianza: 'baja',
       calidad_foto: 'mala', motivo_calidad: 'Imagen vacía — retoma la foto',
       requiere_revision: true, nota: 'El archivo de imagen está vacío',
+    };
+  }
+
+  // ── Blur gate: rechazar imágenes borrosas antes de llamar a la IA ──
+  const nitidez = await calcularNitidez(imagePath);
+  logger.info(`OCR blur score ${imagePath}: ${nitidez.toFixed(1)} (umbral: ${BLUR_THRESHOLD})`);
+  if (nitidez < BLUR_THRESHOLD) {
+    logger.warn(`OCR rechazada por blur (score ${nitidez.toFixed(1)}): ${imagePath}`);
+    return {
+      es_medidor: true,
+      lectura: null,
+      confianza: 'baja',
+      calidad_foto: 'mala',
+      motivo_calidad: `Imagen borrosa (nitidez ${nitidez.toFixed(0)}) — retoma la foto con mejor enfoque`,
+      requiere_revision: true,
+      nota: `Rechazada automáticamente antes de IA: blur score ${nitidez.toFixed(1)} < umbral ${BLUR_THRESHOLD}`,
     };
   }
 
