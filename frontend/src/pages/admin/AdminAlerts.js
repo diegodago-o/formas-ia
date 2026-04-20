@@ -159,13 +159,13 @@ export default function AdminAlerts() {
               >
                 <div className={styles.visitHeaderLeft}>
                   <div className={styles.visitTitulo}>
-                    <span className={styles.visitApto}>Apto {grupo.apartamento}</span>
-                    {grupo.torre && <span className={styles.visitTorre}>Torre {grupo.torre}</span>}
-                    <span className={styles.visitHashId}>#{grupo.visita_id}</span>
+                    <span className={styles.visitId}>Visita #{grupo.visita_id}</span>
+                    <span className={styles.visitApto}>
+                      Apto {grupo.apartamento}{grupo.torre ? ` · Torre ${grupo.torre}` : ''}
+                    </span>
                   </div>
                   <div className={styles.visitMeta}>
-                    <span className={styles.metaChip}>🏘️ {grupo.conjunto}</span>
-                    <span className={styles.metaChip}>📍 {grupo.ciudad}</span>
+                    <span className={styles.metaChip}>🏘️ {grupo.conjunto} · {grupo.ciudad}</span>
                     <span className={styles.metaChip}>👤 {grupo.auditor}</span>
                     <span className={styles.metaChip}>
                       📅 {new Date(grupo.fecha).toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' })}
@@ -176,8 +176,9 @@ export default function AdminAlerts() {
                   <span className={styles.alertCountBadge}>
                     {grupo.alertas.length} alerta{grupo.alertas.length !== 1 ? 's' : ''}
                   </span>
-                  <span className={`${styles.chevron} ${isOpen ? styles.chevronOpen : ''}`}>
-                    ‹
+                  <span className={`${styles.toggleBtn} ${isOpen ? styles.toggleBtnOpen : ''}`}>
+                    {isOpen ? 'Ocultar' : 'Ver hallazgos'}
+                    <span className={`${styles.chevron} ${isOpen ? styles.chevronOpen : ''}`}>▼</span>
                   </span>
                 </div>
               </button>

@@ -113,10 +113,20 @@
   gap: 8px;
   flex-wrap: wrap;
 }
-.visitApto {
-  font-size: 1.05rem;
-  font-weight: 800;
+.visitId {
+  font-size: 1.1rem;
+  font-weight: 900;
   color: var(--text);
+  letter-spacing: -0.01em;
+}
+.visitApto {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: var(--bg);
+  padding: 2px 8px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
 }
 .visitTorre {
   font-size: 0.82rem;
@@ -159,16 +169,36 @@
   white-space: nowrap;
 }
 
+.toggleBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--primary);
+  background: #EFF6FF;
+  border: 1.5px solid #BFDBFE;
+  border-radius: 20px;
+  padding: 5px 12px;
+  white-space: nowrap;
+  transition: background 0.15s, border-color 0.15s;
+}
+.toggleBtnOpen {
+  background: #FEF2F2;
+  border-color: #FCA5A5;
+  color: #991B1B;
+}
+
 .chevron {
-  font-size: 1.4rem;
-  color: var(--text-muted);
+  font-size: 0.75rem;
+  color: inherit;
   line-height: 1;
   display: inline-block;
-  transform: rotate(-90deg);
+  transform: rotate(0deg);
   transition: transform 0.22s ease;
   font-style: normal;
 }
-.chevronOpen { transform: rotate(90deg); }
+.chevronOpen { transform: rotate(180deg); }
 
 /* ── Cuerpo del acordeón ─────────────────────────────────────── */
 .visitBody {
