@@ -681,7 +681,7 @@ export default function NewVisit() {
           <div className={styles.meterProgress}>
             {['luz', 'agua', 'gas'].map(tipo => {
               const m = medidores[tipo];
-              const done = m.lectura || m.sin_acceso || m.foto_path || m.foto_base64 || m.foto;
+              const done = m.lectura || m.sin_acceso || m.foto_path;
               return (
                 <span key={tipo} className={`${styles.meterPill} ${done ? styles.meterPillDone : styles.meterPillPending}`}>
                   {tipo === 'luz' ? '💡' : tipo === 'agua' ? '💧' : '🔥'} {tipo}
