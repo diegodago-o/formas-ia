@@ -36,6 +36,7 @@ export default function MeterField({ tipo, data, onChange, onFile, isOnline = tr
     onChange('preview', URL.createObjectURL(file));
     onChange('lectura', '');
     onChange('foto_path', null);
+    onChange('lectura_guardada', false);
     setImgLoading(true);
     setImgError(false);
     setLecturaSaved(false);
@@ -57,6 +58,7 @@ export default function MeterField({ tipo, data, onChange, onFile, isOnline = tr
     onChange('preview', null);
     onChange('lectura', '');
     onChange('foto_path', null);
+    onChange('lectura_guardada', false);
     setLecturaSaved(false);
     if (inputRef.current) inputRef.current.value = '';
   };
@@ -195,7 +197,7 @@ export default function MeterField({ tipo, data, onChange, onFile, isOnline = tr
             </div>
             <button
               className={styles.btnCorregir}
-              onClick={() => setLecturaSaved(false)}
+              onClick={() => { setLecturaSaved(false); onChange('lectura_guardada', false); }}
             >
               ✏️ Editar
             </button>
@@ -220,7 +222,7 @@ export default function MeterField({ tipo, data, onChange, onFile, isOnline = tr
             />
             <button
               className={styles.btnGuardar}
-              onClick={() => setLecturaSaved(true)}
+              onClick={() => { setLecturaSaved(true); onChange('lectura_guardada', true); }}
               disabled={!data.lectura}
             >
               ✓

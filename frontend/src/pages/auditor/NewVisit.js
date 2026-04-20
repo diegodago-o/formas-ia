@@ -38,6 +38,7 @@ function formatGPSAge(ms) {
 const EMPTY_MEDIDOR = {
   foto: null, preview: null, lectura: '', foto_path: null,
   foto_file: null, sin_acceso: false, motivo_sin_acceso: null,
+  lectura_guardada: false,
 };
 
 export default function NewVisit() {
@@ -304,11 +305,11 @@ export default function NewVisit() {
     setMedidores(prev => ({ ...prev, [tipo]: { ...prev[tipo], foto_file: file, foto_base64: base64 } }));
   };
 
-  // Medidores con foto pero sin lectura confirmada (lectura obligatoria)
+  // Medidores con foto pero sin lectura confirmada con el botón ✓ (obligatorio)
   const medidoresSinLectura = ['luz', 'agua', 'gas'].filter(t => {
     const m = medidores[t];
     const tieneFoto = m.foto_file || m.foto_path || m.foto_base64 || m.preview;
-    return tieneFoto && !m.lectura && !m.sin_acceso;
+    return tieneFoto && !m.sin_acceso && !(m.lectura && m.lectura_guardada);
   });
 
   const canNext = () => {
@@ -522,9 +523,10 @@ export default function NewVisit() {
   const torreNombre    = torres.find(t => String(t.id) === String(torreId))?.nombre
                       || allTorres.find(t => String(t.id) === String(torreId))?.nombre || '';
 
-  const meterDoneCount = ['luz', 'agua', 'gas'].filter(
-    t => medidores[t].lectura || medidores[t].sin_acceso || medidores[t].foto_path || medidores[t].foto_base64
-  ).length;
+  const meterDoneCount = ['luz', 'agua', 'gas'].filter(t => {
+    const m = medidores[t];
+    return m.sin_acceso || ((m.lectura && m.lectura_guardada) && (m.foto_path || m.foto_base64 || m.foto_file || m.preview));
+  }).length;
 
   // ── Pantalla éxito offline ─────────────────────────────────────────
   if (savedOffline) {
@@ -689,7 +691,7 @@ export default function NewVisit() {
           <div className={styles.meterProgress}>
             {['luz', 'agua', 'gas'].map(tipo => {
               const m = medidores[tipo];
-              const done = m.lectura || m.sin_acceso || m.foto_path;
+              const done = m.sin_acceso || (m.lectura && m.lectura_guardada);
               return (
                 <span key={tipo} className={`${styles.meterPill} ${done ? styles.meterPillDone : styles.meterPillPending}`}>
                   {tipo === 'luz' ? '💡' : tipo === 'agua' ? '💧' : '🔥'} {tipo}
