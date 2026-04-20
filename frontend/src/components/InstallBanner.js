@@ -44,8 +44,8 @@ export default function InstallBanner() {
   return (
     <>
       {/* Ícono discreto */}
-      <button className={styles.chip} onClick={() => setSheetOpen(true)} title="Instalar app">
-        📲
+      <button className={styles.chip} onClick={() => setSheetOpen(true)}>
+        📲 Instalar app
       </button>
 
       {/* Bottom-sheet con instrucciones */}
