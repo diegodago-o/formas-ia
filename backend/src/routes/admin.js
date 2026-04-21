@@ -98,6 +98,50 @@ router.get('/visits/:id', ...isAdmin, ah(async (req, res) => {
   res.json({ ...visits[0], medidores });
 }));
 
+// PATCH /api/admin/visits/:id/ubicacion  — corregir ciudad/conjunto/torre/apartamento
+router.patch('/visits/:id/ubicacion', ...isAdmin, ah(async (req, res) => {
+  const { ciudad_id, conjunto_id, torre_id, apartamento } = req.body;
+
+  if (!ciudad_id || !conjunto_id || !apartamento?.trim()) {
+    return res.status(400).json({ error: 'ciudad_id, conjunto_id y apartamento son requeridos' });
+  }
+
+  // Validar que el conjunto pertenece a la ciudad
+  const [[conj]] = await pool.query(
+    'SELECT id FROM conjuntos WHERE id = ? AND ciudad_id = ? AND activo = 1',
+    [conjunto_id, ciudad_id]
+  );
+  if (!conj) return res.status(400).json({ error: 'El conjunto no pertenece a la ciudad indicada' });
+
+  // Validar que la torre pertenece al conjunto (si se envía)
+  if (torre_id) {
+    const [[torre]] = await pool.query(
+      'SELECT id FROM torres WHERE id = ? AND conjunto_id = ? AND activo = 1',
+      [torre_id, conjunto_id]
+    );
+    if (!torre) return res.status(400).json({ error: 'La torre no pertenece al conjunto indicado' });
+  }
+
+  // Validar que la visita existe y no está anulada
+  const [[visita]] = await pool.query('SELECT id, estado FROM visitas WHERE id = ?', [req.params.id]);
+  if (!visita) return res.status(404).json({ error: 'Visita no encontrada' });
+  if (visita.estado === 'anulada') return res.status(400).json({ error: 'No se puede editar una visita anulada' });
+
+  await pool.query(
+    `UPDATE visitas
+     SET ciudad_id   = ?,
+         conjunto_id = ?,
+         torre_id    = ?,
+         apartamento = ?,
+         revisado_por = ?,
+         revisado_en  = NOW()
+     WHERE id = ?`,
+    [ciudad_id, conjunto_id, torre_id || null, apartamento.trim(), req.user.id, req.params.id]
+  );
+
+  res.json({ ok: true });
+}));
+
 // PATCH /api/admin/visits/:id/estado  — aprobar o rechazar visita
 router.patch('/visits/:id/estado', ...isAdmin, ah(async (req, res) => {
   const { estado, motivo_rechazo } = req.body;

@@ -60,6 +60,8 @@
   padding-bottom: 6px;
   border-bottom: 1px solid var(--border);
 }
+/* Cuando h3 está dentro de .sectionHeader, el borde lo maneja el contenedor */
+.sectionHeader > h3 { border-bottom: none; padding-bottom: 0; }
 
 /* Grid datos generales */
 .grid {
@@ -349,3 +351,110 @@
 
 /* Cursor zoom en la miniatura */
 .medFoto { cursor: zoom-in; }
+
+/* ── Edición de ubicación ─────────────────────────────────────── */
+.sectionHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+}
+.sectionHeader h3 {
+  font-size: 0.82rem;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--text-muted);
+  font-weight: 700;
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.btnEditUbic {
+  background: transparent;
+  border: 1.5px solid var(--accent);
+  color: var(--accent);
+  border-radius: var(--radius-sm);
+  padding: 4px 12px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  flex-shrink: 0;
+}
+.btnEditUbic:hover { background: var(--accent); color: #fff; }
+
+.ubicForm {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  background: #F8FAFF;
+  border: 1.5px solid var(--accent);
+  border-radius: var(--radius-sm);
+  padding: 16px;
+}
+
+.ubicGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.ubicField {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.ubicField label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+.ubicField select,
+.ubicField input {
+  padding: 9px 11px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 0.9rem;
+  font-family: inherit;
+  background: var(--surface);
+  outline: none;
+  transition: border-color 0.15s;
+}
+.ubicField select:focus,
+.ubicField input:focus { border-color: var(--accent); }
+.ubicField select:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.ubicError {
+  color: var(--danger);
+  font-size: 0.85rem;
+  margin: 0;
+}
+
+.ubicActions {
+  display: flex;
+  gap: 10px;
+}
+
+.btnGuardarUbic {
+  background: var(--accent);
+  color: #fff;
+  border-radius: var(--radius-sm);
+  padding: 10px 20px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  transition: opacity 0.15s;
+}
+.btnGuardarUbic:disabled { opacity: 0.55; cursor: not-allowed; }
+
+.btnCancelarUbic {
+  background: transparent;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 16px;
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  cursor: pointer;
+}

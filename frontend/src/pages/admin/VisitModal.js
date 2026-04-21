@@ -36,7 +36,85 @@ export default function VisitModal({ visitId, onClose, onUpdated }) {
   const [motivo, setMotivo]     = useState('');
   const [saving, setSaving]     = useState(false);
   const [error, setError]       = useState('');
-  const [lightbox, setLightbox] = useState(null); // URL de la foto ampliada
+  const [lightbox, setLightbox] = useState(null);
+
+  // ── Edición de ubicación ───────────────────────────────────────────────────
+  const [editingUbic, setEditingUbic]   = useState(false);
+  const [ubicForm, setUbicForm]         = useState({ ciudad_id: '', conjunto_id: '', torre_id: '', apartamento: '' });
+  const [ubicCiudades, setUbicCiudades] = useState([]);
+  const [ubicConjuntos, setUbicConjuntos] = useState([]);
+  const [ubicTorres, setUbicTorres]     = useState([]);
+  const [ubicSaving, setUbicSaving]     = useState(false);
+  const [ubicError, setUbicError]       = useState('');
+
+  const openEditUbic = async () => {
+    setUbicError('');
+    // Cargar ciudades
+    const { data: ciudades } = await api.get('/catalogs/ciudades');
+    setUbicCiudades(ciudades);
+    // Cargar conjuntos de la ciudad actual
+    const { data: conjuntos } = await api.get(`/catalogs/conjuntos?ciudad_id=${visit.ciudad_id}`);
+    setUbicConjuntos(conjuntos);
+    // Cargar torres del conjunto actual (si tiene)
+    if (visit.conjunto_id) {
+      const { data: torres } = await api.get(`/catalogs/torres?conjunto_id=${visit.conjunto_id}`);
+      setUbicTorres(torres);
+    } else {
+      setUbicTorres([]);
+    }
+    setUbicForm({
+      ciudad_id:   visit.ciudad_id   || '',
+      conjunto_id: visit.conjunto_id || '',
+      torre_id:    visit.torre_id    || '',
+      apartamento: visit.apartamento || '',
+    });
+    setEditingUbic(true);
+  };
+
+  const handleUbicCiudad = async (ciudad_id) => {
+    setUbicForm(f => ({ ...f, ciudad_id, conjunto_id: '', torre_id: '' }));
+    setUbicConjuntos([]);
+    setUbicTorres([]);
+    if (ciudad_id) {
+      const { data } = await api.get(`/catalogs/conjuntos?ciudad_id=${ciudad_id}`);
+      setUbicConjuntos(data);
+    }
+  };
+
+  const handleUbicConjunto = async (conjunto_id) => {
+    setUbicForm(f => ({ ...f, conjunto_id, torre_id: '' }));
+    setUbicTorres([]);
+    if (conjunto_id) {
+      const { data } = await api.get(`/catalogs/torres?conjunto_id=${conjunto_id}`);
+      setUbicTorres(data);
+    }
+  };
+
+  const saveUbicacion = async () => {
+    if (!ubicForm.ciudad_id || !ubicForm.conjunto_id || !ubicForm.apartamento.trim()) {
+      setUbicError('Ciudad, conjunto y apartamento son obligatorios');
+      return;
+    }
+    setUbicSaving(true);
+    setUbicError('');
+    try {
+      await api.patch(`/admin/visits/${visitId}/ubicacion`, {
+        ciudad_id:   parseInt(ubicForm.ciudad_id),
+        conjunto_id: parseInt(ubicForm.conjunto_id),
+        torre_id:    ubicForm.torre_id ? parseInt(ubicForm.torre_id) : null,
+        apartamento: ubicForm.apartamento.trim(),
+      });
+      // Recargar visita y refrescar lista
+      const { data } = await api.get(`/admin/visits/${visitId}`);
+      setVisit(data);
+      setEditingUbic(false);
+      if (onUpdated) onUpdated();
+    } catch (e) {
+      setUbicError(e.response?.data?.error || 'Error al guardar');
+    } finally {
+      setUbicSaving(false);
+    }
+  };
 
   useEffect(() => {
     api.get(`/admin/visits/${visitId}`)
@@ -80,37 +158,121 @@ export default function VisitModal({ visitId, onClose, onUpdated }) {
 
               {/* Info general */}
               <div className={styles.section}>
-                <h3>Información general</h3>
-                <div className={styles.grid}>
-                  <div className={styles.field}><label>Fecha</label><span>{new Date(visit.fecha).toLocaleString('es-CO')}</span></div>
-                  {visit.hora_inicio && (
-                    <div className={styles.field}><label>Hora inicio</label><span>{new Date(visit.hora_inicio).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}</span></div>
-                  )}
-                  {visit.hora_fin && (
-                    <div className={styles.field}><label>Hora fin</label><span>{new Date(visit.hora_fin).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}</span></div>
-                  )}
-                  {formatDuracion(visit.hora_inicio, visit.hora_fin) && (
-                    <div className={styles.field}><label>Duración</label><span>{formatDuracion(visit.hora_inicio, visit.hora_fin)}</span></div>
-                  )}
-                  <div className={styles.field}><label>Auditor</label><span>{visit.auditor}</span></div>
-                  <div className={styles.field}><label>Ciudad</label><span>{visit.ciudad}</span></div>
-                  <div className={styles.field}><label>Conjunto</label><span>{visit.conjunto}</span></div>
-                  <div className={styles.field}><label>Torre</label><span>{visit.torre || '–'}</span></div>
-                  <div className={styles.field}><label>Apartamento</label><span><strong>{visit.apartamento}</strong></span></div>
-                  {visit.latitud && (
-                    <div className={styles.field}>
-                      <label>Georreferenciación</label>
-                      <a
-                        href={`https://www.google.com/maps?q=${visit.latitud},${visit.longitud}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className={styles.mapLink}
-                      >
-                        📍 {visit.latitud}, {visit.longitud}
-                      </a>
-                    </div>
+                <div className={styles.sectionHeader}>
+                  <h3>Información general</h3>
+                  {!editingUbic && visit.estado !== 'anulada' && (
+                    <button className={styles.btnEditUbic} onClick={openEditUbic}>✏️ Editar ubicación</button>
                   )}
                 </div>
+
+                {/* Modo edición de ubicación */}
+                {editingUbic ? (
+                  <div className={styles.ubicForm}>
+                    <div className={styles.ubicGrid}>
+                      <div className={styles.ubicField}>
+                        <label>Ciudad *</label>
+                        <select
+                          value={ubicForm.ciudad_id}
+                          onChange={e => handleUbicCiudad(e.target.value)}
+                        >
+                          <option value="">— Seleccione ciudad —</option>
+                          {ubicCiudades.map(c => (
+                            <option key={c.id} value={c.id}>{c.nombre}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div className={styles.ubicField}>
+                        <label>Conjunto *</label>
+                        <select
+                          value={ubicForm.conjunto_id}
+                          onChange={e => handleUbicConjunto(e.target.value)}
+                          disabled={!ubicForm.ciudad_id}
+                        >
+                          <option value="">— Seleccione conjunto —</option>
+                          {ubicConjuntos.map(c => (
+                            <option key={c.id} value={c.id}>{c.nombre}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div className={styles.ubicField}>
+                        <label>Torre</label>
+                        <select
+                          value={ubicForm.torre_id}
+                          onChange={e => setUbicForm(f => ({ ...f, torre_id: e.target.value }))}
+                          disabled={!ubicForm.conjunto_id}
+                        >
+                          <option value="">— Sin torre —</option>
+                          {ubicTorres.map(t => (
+                            <option key={t.id} value={t.id}>{t.nombre}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div className={styles.ubicField}>
+                        <label>Apartamento *</label>
+                        <input
+                          type="text"
+                          value={ubicForm.apartamento}
+                          onChange={e => setUbicForm(f => ({ ...f, apartamento: e.target.value }))}
+                          placeholder="Ej: 301"
+                        />
+                      </div>
+                    </div>
+
+                    {ubicError && <p className={styles.ubicError}>{ubicError}</p>}
+
+                    <div className={styles.ubicActions}>
+                      <button
+                        className={styles.btnGuardarUbic}
+                        onClick={saveUbicacion}
+                        disabled={ubicSaving}
+                      >
+                        {ubicSaving ? 'Guardando...' : '✓ Guardar cambios'}
+                      </button>
+                      <button
+                        className={styles.btnCancelarUbic}
+                        onClick={() => { setEditingUbic(false); setUbicError(''); }}
+                        disabled={ubicSaving}
+                      >
+                        Cancelar
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className={styles.grid}>
+                    <div className={styles.field}><label>Fecha</label><span>{new Date(visit.fecha).toLocaleString('es-CO')}</span></div>
+                    {visit.hora_inicio && (
+                      <div className={styles.field}><label>Hora inicio</label><span>{new Date(visit.hora_inicio).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}</span></div>
+                    )}
+                    {visit.hora_fin && (
+                      <div className={styles.field}><label>Hora fin</label><span>{new Date(visit.hora_fin).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}</span></div>
+                    )}
+                    {formatDuracion(visit.hora_inicio, visit.hora_fin) && (
+                      <div className={styles.field}><label>Duración</label><span>{formatDuracion(visit.hora_inicio, visit.hora_fin)}</span></div>
+                    )}
+                    <div className={styles.field}><label>Auditor</label><span>{visit.auditor}</span></div>
+                    <div className={styles.field}><label>Ciudad</label><span>{visit.ciudad}</span></div>
+                    <div className={styles.field}><label>Conjunto</label><span>{visit.conjunto}</span></div>
+                    <div className={styles.field}><label>Torre</label><span>{visit.torre || '–'}</span></div>
+                    <div className={styles.field}><label>Apartamento</label><span><strong>{visit.apartamento}</strong></span></div>
+                    {visit.latitud && (
+                      <div className={styles.field}>
+                        <label>Georreferenciación</label>
+                        <a
+                          href={`https://www.google.com/maps?q=${visit.latitud},${visit.longitud}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className={styles.mapLink}
+                        >
+                          📍 {visit.latitud}, {visit.longitud}
+                        </a>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {visit.observaciones && (
                   <div className={styles.obs}>
                     <label>Observaciones del auditor</label>
