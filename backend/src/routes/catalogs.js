@@ -18,8 +18,15 @@ router.get('/ciudades', authMiddleware, ah(async (req, res) => {
 router.post('/ciudades', ...isAdmin, ah(async (req, res) => {
   const { nombre } = req.body;
   if (!nombre) return res.status(400).json({ error: 'Nombre requerido' });
-  const [result] = await pool.query('INSERT INTO ciudades (nombre) VALUES (?)', [nombre.trim()]);
-  res.status(201).json({ id: result.insertId, nombre });
+  const nom = nombre.trim();
+  // Si existe (incluso inactiva), reactivar
+  const [existing] = await pool.query('SELECT id FROM ciudades WHERE nombre = ?', [nom]);
+  if (existing.length) {
+    await pool.query('UPDATE ciudades SET activo = 1 WHERE id = ?', [existing[0].id]);
+    return res.status(201).json({ id: existing[0].id, nombre: nom, reactivada: true });
+  }
+  const [result] = await pool.query('INSERT INTO ciudades (nombre) VALUES (?)', [nom]);
+  res.status(201).json({ id: result.insertId, nombre: nom });
 }));
 
 router.delete('/ciudades/:id', ...isAdmin, ah(async (req, res) => {
@@ -53,15 +60,37 @@ router.get('/conjuntos', authMiddleware, ah(async (req, res) => {
 router.post('/conjuntos', ...isAdmin, ah(async (req, res) => {
   const { nombre, ciudad_id, direccion, torres = [] } = req.body;
   if (!nombre || !ciudad_id) return res.status(400).json({ error: 'Nombre y ciudad_id requeridos' });
-  const [result] = await pool.query(
-    'INSERT INTO conjuntos (nombre, ciudad_id, direccion) VALUES (?, ?, ?)',
-    [nombre.trim(), ciudad_id, direccion || null]
+  const nom = nombre.trim();
+  // Si existe (incluso inactivo), reactivar
+  const [existing] = await pool.query(
+    'SELECT id FROM conjuntos WHERE nombre = ? AND ciudad_id = ?', [nom, ciudad_id]
   );
-  const conjId = result.insertId;
-  for (const t of torres.filter(n => n?.trim())) {
-    await pool.query('INSERT INTO torres (nombre, conjunto_id) VALUES (?, ?)', [t.trim(), conjId]);
+  let conjId;
+  if (existing.length) {
+    conjId = existing[0].id;
+    await pool.query(
+      'UPDATE conjuntos SET activo = 1, direccion = COALESCE(?, direccion) WHERE id = ?',
+      [direccion || null, conjId]
+    );
+  } else {
+    const [result] = await pool.query(
+      'INSERT INTO conjuntos (nombre, ciudad_id, direccion) VALUES (?, ?, ?)',
+      [nom, ciudad_id, direccion || null]
+    );
+    conjId = result.insertId;
   }
-  res.status(201).json({ id: conjId, nombre, ciudad_id, direccion });
+  // Torres: insertar solo las que no existan ya
+  for (const t of torres.filter(n => n?.trim())) {
+    const [et] = await pool.query(
+      'SELECT id FROM torres WHERE nombre = ? AND conjunto_id = ?', [t.trim(), conjId]
+    );
+    if (et.length) {
+      await pool.query('UPDATE torres SET activo = 1 WHERE id = ?', [et[0].id]);
+    } else {
+      await pool.query('INSERT INTO torres (nombre, conjunto_id) VALUES (?, ?)', [t.trim(), conjId]);
+    }
+  }
+  res.status(201).json({ id: conjId, nombre: nom, ciudad_id, direccion });
 }));
 
 router.delete('/conjuntos/:id', ...isAdmin, ah(async (req, res) => {
@@ -96,10 +125,19 @@ router.get('/torres', authMiddleware, ah(async (req, res) => {
 router.post('/torres', ...isAdmin, ah(async (req, res) => {
   const { nombre, conjunto_id } = req.body;
   if (!nombre || !conjunto_id) return res.status(400).json({ error: 'Nombre y conjunto_id requeridos' });
-  const [result] = await pool.query(
-    'INSERT INTO torres (nombre, conjunto_id) VALUES (?, ?)', [nombre.trim(), conjunto_id]
+  const nom = nombre.trim();
+  // Si existe (incluso inactiva), reactivar
+  const [existing] = await pool.query(
+    'SELECT id FROM torres WHERE nombre = ? AND conjunto_id = ?', [nom, conjunto_id]
   );
-  res.status(201).json({ id: result.insertId, nombre, conjunto_id });
+  if (existing.length) {
+    await pool.query('UPDATE torres SET activo = 1 WHERE id = ?', [existing[0].id]);
+    return res.status(201).json({ id: existing[0].id, nombre: nom, conjunto_id, reactivada: true });
+  }
+  const [result] = await pool.query(
+    'INSERT INTO torres (nombre, conjunto_id) VALUES (?, ?)', [nom, conjunto_id]
+  );
+  res.status(201).json({ id: result.insertId, nombre: nom, conjunto_id });
 }));
 
 router.delete('/torres/:id', ...isAdmin, ah(async (req, res) => {
