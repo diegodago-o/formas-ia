@@ -47,29 +47,35 @@ export default function AdminCatalogs() {
   // ── Agregar ────────────────────────────────────────
   const addCiudad = async () => {
     if (!newCiudad.trim()) return;
-    await api.post('/catalogs/ciudades', { nombre: newCiudad.trim() });
-    setNewCiudad(''); setAddingCiudad(false); loadAll(); flash('Ciudad creada');
+    try {
+      await api.post('/catalogs/ciudades', { nombre: newCiudad.trim() });
+      setNewCiudad(''); setAddingCiudad(false); loadAll(); flash('Ciudad creada');
+    } catch (e) { boom(e.response?.data?.error || 'Error al crear la ciudad'); }
   };
 
   const addConj = async () => {
     if (!newConj.nombre.trim() || !addingConj) return;
-    const torresValidas = newConj.torres.map(t => t.trim()).filter(Boolean);
-    await api.post('/catalogs/conjuntos', {
-      nombre:    newConj.nombre.trim(),
-      ciudad_id: addingConj,
-      direccion: newConj.direccion || null,
-      torres:    torresValidas,
-    });
-    setNewConj({ nombre: '', direccion: '', torres: [''] });
-    setAddingConj(null);
-    loadAll();
-    flash(`Conjunto creado${torresValidas.length ? ` con ${torresValidas.length} torre(s)` : ''}`);
+    try {
+      const torresValidas = newConj.torres.map(t => t.trim()).filter(Boolean);
+      await api.post('/catalogs/conjuntos', {
+        nombre:    newConj.nombre.trim(),
+        ciudad_id: addingConj,
+        direccion: newConj.direccion || null,
+        torres:    torresValidas,
+      });
+      setNewConj({ nombre: '', direccion: '', torres: [''] });
+      setAddingConj(null);
+      loadAll();
+      flash(`Conjunto creado${torresValidas.length ? ` con ${torresValidas.length} torre(s)` : ''}`);
+    } catch (e) { boom(e.response?.data?.error || 'Error al crear el conjunto'); }
   };
 
   const addTorre = async () => {
     if (!newTorre.trim() || !addingTorre) return;
-    await api.post('/catalogs/torres', { nombre: newTorre.trim(), conjunto_id: addingTorre });
-    setNewTorre(''); setAddingTorre(null); loadAll(); flash('Torre creada');
+    try {
+      await api.post('/catalogs/torres', { nombre: newTorre.trim(), conjunto_id: addingTorre });
+      setNewTorre(''); setAddingTorre(null); loadAll(); flash('Torre creada');
+    } catch (e) { boom(e.response?.data?.error || 'Error al crear la torre'); }
   };
 
   // ── Eliminar ───────────────────────────────────────
