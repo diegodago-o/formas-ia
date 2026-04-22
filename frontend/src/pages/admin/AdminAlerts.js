@@ -475,7 +475,7 @@ export default function AdminAlerts() {
                           )}
 
                         </div>
-                        </div> {/* medCardWrapper */}
+                        </div>
                       );
                     })}
                   </div>
