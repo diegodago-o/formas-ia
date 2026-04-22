@@ -34,9 +34,29 @@ router.get('/stats', ...isAdmin, ah(async (req, res) => {
 }));
 
 // GET /api/admin/visits  — todas las visitas con filtros
+// Columnas permitidas para ORDER BY — previene SQL injection
+const SORT_COLS = {
+  id:       'v.id',
+  fecha:    'v.fecha',
+  hinicio:  'v.hora_inicio',
+  hfin:     'v.hora_fin',
+  ciudad:   'ci.nombre',
+  conjunto: 'c.nombre',
+  torre:    't.nombre',
+  apto:     'v.apartamento',
+  auditor:  'u.nombre',
+  estado:   'v.estado',
+  alertas:  'alertas_ocr',   // alias del subquery — MySQL permite usarlo en ORDER BY
+};
+
 router.get('/visits', ...isAdmin, ah(async (req, res) => {
-  const { ciudad_id, conjunto_id, auditor_id, desde, hasta, requiere_revision, estado, page = 1, limit = 20 } = req.query;
+  const { ciudad_id, conjunto_id, auditor_id, desde, hasta, requiere_revision, estado,
+          sort_by, sort_dir, page = 1, limit = 20 } = req.query;
   const offset = (page - 1) * limit;
+
+  // ORDER BY dinámico con lista blanca
+  const orderCol = SORT_COLS[sort_by] || 'v.fecha';
+  const orderDir = sort_dir === 'asc' ? 'ASC' : 'DESC';
   const conditions = [];
   const params = [];
 
@@ -68,7 +88,7 @@ router.get('/visits', ...isAdmin, ah(async (req, res) => {
      LEFT JOIN torres t ON t.id = v.torre_id
      JOIN usuarios u ON u.id = v.auditor_id
      ${where}
-     ORDER BY v.fecha DESC
+     ORDER BY ${orderCol} ${orderDir}
      LIMIT ? OFFSET ?`,
     [...params, parseInt(limit), parseInt(offset)]
   );

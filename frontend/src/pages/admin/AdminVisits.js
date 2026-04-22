@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import api from '../../services/api';
 import VisitModal from './VisitModal';
 import styles from './AdminVisits.module.css';
@@ -10,53 +10,37 @@ const ESTADO_STYLE = {
   anulada:   { bg: '#F3F4F6', color: '#6B7280' },
 };
 
-// Columnas y cómo extraer su valor para comparar
-const COL_ACCESSOR = {
-  id:       v => v.id,
-  fecha:    v => v.fecha || '',
-  hinicio:  v => v.hora_inicio || '',
-  hfin:     v => v.hora_fin || '',
-  ciudad:   v => v.ciudad || '',
-  conjunto: v => v.conjunto || '',
-  torre:    v => v.torre || '',
-  apto:     v => v.apartamento || '',
-  auditor:  v => v.auditor || '',
-  estado:   v => v.estado || '',
-  alertas:  v => v.alertas_ocr ?? 0,
-};
-
-function compare(a, b, col, dir) {
-  const va = COL_ACCESSOR[col](a);
-  const vb = COL_ACCESSOR[col](b);
-  let cmp;
-  if (typeof va === 'number') {
-    cmp = va - vb;
-  } else {
-    cmp = String(va).localeCompare(String(vb), 'es', { numeric: true });
-  }
-  return dir === 'asc' ? cmp : -cmp;
-}
-
 export default function AdminVisits() {
-  const [data, setData]           = useState({ data: [], total: 0 });
-  const [page, setPage]           = useState(1);
-  const [filters, setFilters]     = useState({ desde: '', hasta: '', estado: '', requiere_revision: '' });
-  const [loading, setLoading]     = useState(true);
+  const [data, setData]             = useState({ data: [], total: 0 });
+  const [page, setPage]             = useState(1);
+  const [filters, setFilters]       = useState({ desde: '', hasta: '', estado: '', requiere_revision: '' });
+  const [loading, setLoading]       = useState(true);
   const [selectedId, setSelectedId] = useState(null);
-  const [sort, setSort]           = useState({ col: null, dir: 'asc' });
+  const [sort, setSort]             = useState({ col: null, dir: 'desc' }); // default: fecha desc
 
-  const load = (p = page, f = filters) => {
+  const load = (p = page, f = filters, s = sort) => {
     setLoading(true);
     const params = new URLSearchParams({
       page: p, limit: 20,
       ...Object.fromEntries(Object.entries(f).filter(([, v]) => v !== '')),
+      ...(s.col ? { sort_by: s.col, sort_dir: s.dir } : {}),
     });
     api.get(`/admin/visits?${params}`).then(r => setData(r.data)).finally(() => setLoading(false));
   };
 
   useEffect(() => { load(); }, []); // eslint-disable-line
 
-  const applyFilters = () => { setPage(1); load(1, filters); };
+  const applyFilters = () => { setPage(1); load(1, filters, sort); };
+
+  const handleSort = (col) => {
+    const newSort = {
+      col,
+      dir: sort.col === col && sort.dir === 'asc' ? 'desc' : 'asc',
+    };
+    setSort(newSort);
+    setPage(1);
+    load(1, filters, newSort);
+  };
 
   const downloadExcel = async () => {
     const params = new URLSearchParams(Object.fromEntries(Object.entries(filters).filter(([, v]) => v !== '')));
@@ -65,19 +49,6 @@ export default function AdminVisits() {
     const a    = document.createElement('a');
     a.href = url; a.download = `lectura-ia-${Date.now()}.xlsx`; a.click();
     URL.revokeObjectURL(url);
-  };
-
-  // Ordenar la página actual en el cliente
-  const sortedRows = useMemo(() => {
-    if (!sort.col) return data.data;
-    return [...data.data].sort((a, b) => compare(a, b, sort.col, sort.dir));
-  }, [data.data, sort]);
-
-  const handleSort = (col) => {
-    setSort(prev => ({
-      col,
-      dir: prev.col === col && prev.dir === 'asc' ? 'desc' : 'asc',
-    }));
   };
 
   // Encabezado de columna ordenable
@@ -143,7 +114,7 @@ export default function AdminVisits() {
                 </tr>
               </thead>
               <tbody>
-                {sortedRows.map(v => {
+                {data.data.map(v => {
                   const est = ESTADO_STYLE[v.estado || 'pendiente'];
                   return (
                     <tr key={v.id}>
