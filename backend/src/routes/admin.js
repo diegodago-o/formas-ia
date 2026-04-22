@@ -228,11 +228,28 @@ router.post('/users', ...isAdmin, ah(async (req, res) => {
 
 // PATCH /api/admin/users/:id
 router.patch('/users/:id', ...isAdmin, ah(async (req, res) => {
-  const { nombre, activo } = req.body;
-  await pool.query(
-    'UPDATE usuarios SET nombre = COALESCE(?, nombre), activo = COALESCE(?, activo) WHERE id = ?',
-    [nombre, activo, req.params.id]
-  );
+  const { nombre, activo, password } = req.body;
+
+  if (password !== undefined) {
+    if (!password || password.length < 6) {
+      return res.status(400).json({ error: 'La contraseña debe tener al menos 6 caracteres' });
+    }
+    const hash = await bcrypt.hash(password, 12);
+    await pool.query(
+      `UPDATE usuarios
+       SET nombre         = COALESCE(?, nombre),
+           activo         = COALESCE(?, activo),
+           password_hash  = ?
+       WHERE id = ?`,
+      [nombre ?? null, activo ?? null, hash, req.params.id]
+    );
+  } else {
+    await pool.query(
+      'UPDATE usuarios SET nombre = COALESCE(?, nombre), activo = COALESCE(?, activo) WHERE id = ?',
+      [nombre ?? null, activo ?? null, req.params.id]
+    );
+  }
+
   res.json({ ok: true });
 }));
 
