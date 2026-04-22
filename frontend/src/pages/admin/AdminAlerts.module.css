@@ -586,3 +586,43 @@
   transition: background 0.15s;
 }
 .lightboxClose:hover { background: rgba(255,255,255,0.25); }
+
+/* ── Notificación auto-cierre de visita ──────────────────────── */
+.notification {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 18px;
+  border-radius: 10px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  line-height: 1.4;
+  animation: notifIn 0.3s ease;
+}
+@keyframes notifIn {
+  from { opacity: 0; transform: translateY(-8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.notificationOk {
+  background: #D1FAE5;
+  color: #065F46;
+  border: 1.5px solid #6EE7B7;
+}
+.notificationErr {
+  background: #FEE2E2;
+  color: #991B1B;
+  border: 1.5px solid #FCA5A5;
+}
+.notifClose {
+  background: transparent;
+  border: none;
+  font-size: 1rem;
+  cursor: pointer;
+  color: inherit;
+  opacity: 0.55;
+  padding: 0 4px;
+  flex-shrink: 0;
+  line-height: 1;
+}
+.notifClose:hover { opacity: 1; }

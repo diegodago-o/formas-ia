@@ -48,6 +48,7 @@ export default function AdminAlerts() {
   const [saving, setSaving]           = useState(false);
   const [openVisits, setOpenVisits]   = useState(new Set());
   const [exitingIds, setExitingIds]   = useState(new Set()); // medidor_ids saliendo con animación
+  const [notification, setNotification] = useState(null);   // { mensaje, tipo: 'aprobada'|'rechazada' }
 
   // true solo durante la carga inicial; las recargas post-acción no muestran spinner
   // ni resetean los acordeones abiertos
@@ -74,7 +75,18 @@ export default function AdminAlerts() {
   const doResolve = async (id, payload) => {
     setSaving(true);
     try {
-      await api.patch(`/admin/medidores/${id}`, payload);
+      const response = await api.patch(`/admin/medidores/${id}`, payload);
+
+      // Notificación si la visita se cerró automáticamente
+      if (response.data?.visita_auto) {
+        const va = response.data.visita_auto;
+        const mensaje = va.estado === 'aprobada'
+          ? `✅ Visita #${va.id} aprobada automáticamente`
+          : `❌ Visita #${va.id} rechazada — ${va.motivo_rechazo}`;
+        setNotification({ mensaje, tipo: va.estado });
+        setTimeout(() => setNotification(null), 6000);
+      }
+
       // 1. Activar animación de salida (fade + colapso)
       setExitingIds(prev => new Set([...prev, id]));
       // 2. Eliminar del estado local cuando la animación termina (0.65 s)
@@ -136,6 +148,15 @@ export default function AdminAlerts() {
 
   return (
     <div className={styles.page}>
+
+      {/* Banner de auto-aprobación / rechazo */}
+      {notification && (
+        <div className={`${styles.notification} ${styles[`notification${notification.tipo === 'aprobada' ? 'Ok' : 'Err'}`]}`}>
+          <span>{notification.mensaje}</span>
+          <button className={styles.notifClose} onClick={() => setNotification(null)}>✕</button>
+        </div>
+      )}
+
       {/* Encabezado */}
       <div className={styles.pageHeader}>
         <div>

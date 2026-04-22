@@ -203,6 +203,51 @@ router.patch('/medidores/:id', ...isAdmin, ah(async (req, res) => {
      WHERE id = ?`,
     [lectura_confirmada || null, estado_revision_ocr || null, req.user.id, req.params.id]
   );
+
+  // ── Auto-aprobación / rechazo de la visita ────────────────────
+  // Cuando todos los medidores de una visita dejan de tener requiere_revision=1,
+  // la visita se cierra automáticamente según el resultado de cada medidor.
+  const [[med]] = await pool.query('SELECT visita_id FROM medidores WHERE id = ?', [req.params.id]);
+  if (med) {
+    const { visita_id } = med;
+
+    // ¿Quedan medidores pendientes de revisión?
+    const [[{ pendientes }]] = await pool.query(
+      'SELECT COUNT(*) AS pendientes FROM medidores WHERE visita_id = ? AND requiere_revision = 1',
+      [visita_id]
+    );
+
+    if (pendientes === 0) {
+      // Solo actuar si la visita sigue en estado 'pendiente'
+      const [[visita]] = await pool.query('SELECT id, estado FROM visitas WHERE id = ?', [visita_id]);
+
+      if (visita && visita.estado === 'pendiente') {
+        const [medidores] = await pool.query(
+          'SELECT tipo, estado_revision_ocr FROM medidores WHERE visita_id = ?',
+          [visita_id]
+        );
+
+        const rechazados = medidores.filter(m => m.estado_revision_ocr === 'rechazado');
+        let nuevoEstado, motivoRechazo = null;
+
+        if (rechazados.length > 0) {
+          nuevoEstado  = 'rechazada';
+          const tipos  = rechazados.map(m => m.tipo).join(', ');
+          motivoRechazo = `Medidor(es) rechazado(s) automáticamente: ${tipos}`;
+        } else {
+          nuevoEstado = 'aprobada';
+        }
+
+        await pool.query(
+          `UPDATE visitas SET estado = ?, motivo_rechazo = ?, revisado_por = ?, revisado_en = NOW() WHERE id = ?`,
+          [nuevoEstado, motivoRechazo, req.user.id, visita_id]
+        );
+
+        return res.json({ ok: true, visita_auto: { id: visita_id, estado: nuevoEstado, motivo_rechazo: motivoRechazo } });
+      }
+    }
+  }
+
   res.json({ ok: true });
 }));
 
