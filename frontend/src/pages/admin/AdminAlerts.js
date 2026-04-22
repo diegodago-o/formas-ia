@@ -47,6 +47,7 @@ export default function AdminAlerts() {
   const [newVal, setNewVal]           = useState('');
   const [saving, setSaving]           = useState(false);
   const [openVisits, setOpenVisits]   = useState(new Set());
+  const [exitingIds, setExitingIds]   = useState(new Set()); // medidor_ids saliendo con animación
 
   // true solo durante la carga inicial; las recargas post-acción no muestran spinner
   // ni resetean los acordeones abiertos
@@ -68,26 +69,30 @@ export default function AdminAlerts() {
 
   useEffect(() => { load(); }, []);
 
-  const resolver = async (id, estado_revision_ocr, lectura_confirmada = null) => {
+  // Lógica unificada: anima la salida del item y lo elimina del estado local
+  // sin recargar la página ni hacer scroll
+  const doResolve = async (id, payload) => {
     setSaving(true);
     try {
-      await api.patch(`/admin/medidores/${id}`, { estado_revision_ocr, lectura_confirmada });
-      load();
+      await api.patch(`/admin/medidores/${id}`, payload);
+      // 1. Activar animación de salida (fade + colapso)
+      setExitingIds(prev => new Set([...prev, id]));
+      // 2. Eliminar del estado local cuando la animación termina (0.65 s)
+      setTimeout(() => {
+        setAlerts(prev => prev.filter(a => a.medidor_id !== id));
+        setExitingIds(prev => { const n = new Set(prev); n.delete(id); return n; });
+      }, 650);
     } finally { setSaving(false); }
   };
 
+  const resolver = (id, estado_revision_ocr, lectura_confirmada = null) =>
+    doResolve(id, { estado_revision_ocr, lectura_confirmada });
+
   const confirmarLectura = async (id) => {
     if (!newVal.trim()) return;
-    setSaving(true);
-    try {
-      await api.patch(`/admin/medidores/${id}`, {
-        estado_revision_ocr: 'corregido',
-        lectura_confirmada: newVal.trim(),
-      });
-      setEditing(null);
-      setNewVal('');
-      load();
-    } finally { setSaving(false); }
+    setEditing(null);
+    setNewVal('');
+    await doResolve(id, { estado_revision_ocr: 'corregido', lectura_confirmada: newVal.trim() });
   };
 
   const toggleVisit = (id) => {
@@ -211,9 +216,14 @@ export default function AdminAlerts() {
                       const noEsMed    = tipo === 'no_es_medidor';
                       const discrep    = tipo === 'discrepancia';
                       const isEditing  = editing === a.medidor_id;
+                      const isExiting  = exitingIds.has(a.medidor_id);
 
                       return (
-                        <div key={a.medidor_id} className={`${styles.medCard} ${styles[`med-${tipo}`]}`}>
+                        <div
+                          key={a.medidor_id}
+                          className={`${styles.medCardWrapper} ${isExiting ? styles.medCardWrapperExiting : ''}`}
+                        >
+                        <div className={`${styles.medCard} ${styles[`med-${tipo}`]}`}>
 
                           {/* Cabecera medidor */}
                           <div className={styles.medHeader}>
@@ -465,6 +475,7 @@ export default function AdminAlerts() {
                           )}
 
                         </div>
+                        </div> {/* medCardWrapper */}
                       );
                     })}
                   </div>

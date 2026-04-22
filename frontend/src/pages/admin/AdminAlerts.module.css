@@ -228,7 +228,28 @@
 .btnVerIcon { font-size: 0.9rem; }
 
 /* ── Lista de medidores ──────────────────────────────────────── */
-.medList { display: flex; flex-direction: column; gap: 10px; }
+.medList { display: flex; flex-direction: column; }
+
+/* Wrapper animable — reemplaza el gap del padre con margin-bottom propio */
+.medCardWrapper {
+  margin-bottom: 10px;
+  max-height: 1400px;  /* valor alto para que la transición tenga origen definido */
+  overflow: hidden;
+  opacity: 1;
+  /* opacity fade inmediato; colapso de altura empieza cuando opacity ya llegó a 0 */
+  transition:
+    opacity   0.25s ease,
+    max-height 0.38s ease 0.22s,
+    margin-bottom 0.38s ease 0.22s;
+}
+.medCardWrapper:last-child { margin-bottom: 0; }
+
+/* Estado de salida: invisible → colapsa → margen desaparece */
+.medCardWrapperExiting {
+  opacity: 0;
+  max-height: 0;
+  margin-bottom: 0;
+}
 
 /* ── Tarjeta de medidor ──────────────────────────────────────── */
 .medCard {
