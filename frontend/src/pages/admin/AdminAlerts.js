@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import api from '../../services/api';
 import VisitModal from './VisitModal';
 import styles from './AdminAlerts.module.css';
@@ -48,13 +48,20 @@ export default function AdminAlerts() {
   const [saving, setSaving]           = useState(false);
   const [openVisits, setOpenVisits]   = useState(new Set());
 
+  // true solo durante la carga inicial; las recargas post-acción no muestran spinner
+  // ni resetean los acordeones abiertos
+  const isFirstLoad = useRef(true);
+
   const load = () => {
-    setLoading(true);
+    if (isFirstLoad.current) setLoading(true);
     api.get('/admin/alerts')
       .then(r => {
         setAlerts(r.data);
-        // Todos los acordeones cerrados por defecto
-        setOpenVisits(new Set());
+        if (isFirstLoad.current) {
+          setOpenVisits(new Set()); // acordeones cerrados solo al entrar por primera vez
+          isFirstLoad.current = false;
+        }
+        // En recargas posteriores: openVisits se preserva tal cual
       })
       .finally(() => setLoading(false));
   };

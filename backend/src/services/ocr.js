@@ -40,19 +40,69 @@ async function calcularNitidez(imagePath) {
   }
 }
 
+// ─────────────────────────────────────────────────────────────
+// Medir luminancia promedio (0–255) para ajustar brillo adaptativo
+// ─────────────────────────────────────────────────────────────
+async function medirBrillo(imagePath) {
+  try {
+    const { data } = await sharp(imagePath)
+      .grayscale()
+      .resize(64, 64, { fit: 'inside', withoutEnlargement: true })
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+    const pixels = new Uint8Array(data);
+    return pixels.reduce((s, p) => s + p, 0) / pixels.length;
+  } catch {
+    return 128; // valor neutro si falla
+  }
+}
+
 async function preprocessImage(inputPath) {
   const tmpPath = path.join(
     os.tmpdir(),
     `ocr_${Date.now()}_${path.basename(inputPath)}.jpg`
   );
+
+  // Brillo adaptativo según luminancia de la imagen original
+  const brillo = await medirBrillo(inputPath);
+  let brightnessBoost;
+  if      (brillo < 60)  brightnessBoost = 1.55;  // muy oscura
+  else if (brillo < 80)  brightnessBoost = 1.40;  // oscura
+  else if (brillo < 110) brightnessBoost = 1.25;  // algo oscura
+  else if (brillo < 140) brightnessBoost = 1.10;  // normal
+  else                   brightnessBoost = 1.00;  // clara — sin boost
+
+  logger.info(`OCR brillo ${path.basename(inputPath)}: ${brillo.toFixed(1)} → boost ${brightnessBoost}`);
+
   await sharp(inputPath)
-    .rotate()
+    .rotate()                                          // corrige rotación EXIF
     .resize(2048, 2048, { fit: 'inside', withoutEnlargement: true })
     .sharpen({ sigma: 1.0 })
-    .modulate({ saturation: 1.4, brightness: 1.05 })
+    .modulate({ saturation: 1.4, brightness: brightnessBoost })
     .jpeg({ quality: 93 })
     .toFile(tmpPath);
   return tmpPath;
+}
+
+// ─────────────────────────────────────────────────────────────
+// Cola de concurrencia — evita saturar el límite de tokens/minuto
+// Configurable: OCR_MAX_CONCURRENT (default 2)
+// Con 30 000 TPM y ~2 600 tokens/imagen → máx ~11 imágenes/min
+// Limitar a 2 concurrentes + retry hace que las colas drenen solas
+// ─────────────────────────────────────────────────────────────
+const OCR_MAX_CONCURRENT = parseInt(process.env.OCR_MAX_CONCURRENT || '2', 10);
+let _ocrActive = 0;
+const _ocrQueue = [];
+
+function _tomarSlotOCR() {
+  return new Promise(resolve => {
+    if (_ocrActive < OCR_MAX_CONCURRENT) { _ocrActive++; resolve(); }
+    else { _ocrQueue.push(resolve); }
+  });
+}
+function _liberarSlotOCR() {
+  _ocrActive--;
+  if (_ocrQueue.length > 0) { _ocrActive++; _ocrQueue.shift()(); }
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -82,6 +132,55 @@ async function llamarModelo(imageBuffer, mediaType, prompt) {
 }
 
 // ─────────────────────────────────────────────────────────────
+// Wrapper con reintentos automáticos ante 429
+// OpenAI devuelve "try again in 5.188s" — lo usamos exactamente
+// ─────────────────────────────────────────────────────────────
+async function llamarModeloConRetry(imageBuffer, mediaType, prompt, maxRetries = 4) {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await llamarModelo(imageBuffer, mediaType, prompt);
+    } catch (err) {
+      const msg = err.message || '';
+      const is429 = err.status === 429 || msg.startsWith('429');
+      if (is429 && attempt < maxRetries) {
+        // Leer el tiempo exacto que indica OpenAI: "try again in 5.188s"
+        const hint = msg.match(/try again in ([\d.]+)s/i);
+        const waitMs = hint
+          ? Math.ceil(parseFloat(hint[1]) * 1000) + 1000   // margen +1 s
+          : Math.min(8000 * (attempt + 1), 60000);          // fallback exponencial
+        logger.warn(`OCR 429 rate-limit — esperando ${waitMs}ms (intento ${attempt + 1}/${maxRetries}): ${path.basename(imageBuffer.length.toString())}`);
+        await new Promise(r => setTimeout(r, waitMs));
+      } else {
+        throw err;
+      }
+    }
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// Validación cruzada: digitos_individuales vs lectura ensamblada
+// Detecta inconsistencias internas del modelo antes de usar el resultado
+// ─────────────────────────────────────────────────────────────
+function validarDigitosVsLectura(json) {
+  if (!json.digitos_individuales || !json.lectura) return null;
+  try {
+    // "0,0,2,1,5 | 2,5,9" → "00215259"
+    const flat = json.digitos_individuales
+      .replace(/\s*\|\s*/g, ',')
+      .split(',')
+      .map(d => d.trim())
+      .filter(d => /^\d$/.test(d))
+      .join('');
+    // "00215.259" → "00215259"
+    const lecturaFlat = json.lectura.replace(/\./g, '');
+    if (flat.length > 0 && lecturaFlat.length > 0 && flat !== lecturaFlat) {
+      return `digitos_individuales (${flat}) ≠ lectura (${lecturaFlat})`;
+    }
+  } catch { /* si falla el parse, no bloqueamos */ }
+  return null;
+}
+
+// ─────────────────────────────────────────────────────────────
 // Parsear resultado del modelo a formato estándar
 // ─────────────────────────────────────────────────────────────
 function parsearResultado(json) {
@@ -89,7 +188,18 @@ function parsearResultado(json) {
   const esMedidor = json.es_medidor !== false;
   // Refuerzo anti-alucinación: si calidad es mala, la lectura no es confiable
   const lectura   = (calidad === 'mala') ? null : (json.lectura ?? null);
-  const confianza = json.confianza ?? 'baja';
+  let confianza   = json.confianza ?? 'baja';
+  let nota        = json.nota ?? '';
+
+  // Validación cruzada interna: si digitos_individuales difiere de lectura → bajar confianza
+  if (lectura) {
+    const discrepancia = validarDigitosVsLectura(json);
+    if (discrepancia) {
+      confianza = 'baja';
+      nota = `[DISCREPANCIA INTERNA: ${discrepancia}] ${nota}`.trim();
+    }
+  }
+
   return {
     es_medidor:        esMedidor,
     lectura,
@@ -97,7 +207,7 @@ function parsearResultado(json) {
     calidad_foto:      calidad,
     motivo_calidad:    (json.motivo_calidad && !json.motivo_calidad.toLowerCase().includes('omitir'))
                          ? json.motivo_calidad : null,
-    nota:              json.nota ?? '',
+    nota,
     requiere_revision: !esMedidor || lectura === null || calidad === 'mala' || confianza === 'baja',
   };
 }
@@ -122,6 +232,11 @@ PARES CONFLICTIVOS:
            El SEIS tiene una curva ABIERTA visible en la parte superior (arco que se abre hacia arriba).
            Si no ves una apertura clara en la parte superior → es 0, no 6.
 · 1 vs 7 → El SIETE tiene un trazo horizontal en la parte superior. Si no hay trazo horizontal → es 1.
+· 2 vs 5 → El DOS tiene la curva en la parte SUPERIOR y la BASE completamente plana y recta.
+           El CINCO tiene un trazo recto horizontal en la PARTE SUPERIOR y un VIENTRE REDONDEADO
+           en la base (barriga curva cerrada hacia abajo).
+           En tambores: base plana → es 2. Vientre curvo inferior → es 5.
+           CRÍTICO: confundir 2 con 5 invierte la lectura en ~3 unidades.
 · 3 vs 8 → El TRES tiene la parte superior abierta (dos arcos, el de arriba abierto hacia la izquierda).
            El OCHO es completamente cerrado (dos óvalos apilados). Si ambas mitades están cerradas → es 8.
 · 5 vs 6 → El CINCO tiene la parte inferior redondeada y la superior con un trazo recto a la izquierda.
@@ -136,6 +251,30 @@ Regla clave: los efectos ópticos del vidrio (halos, sombras, doble contorno) NO
              del dígito ignorando cualquier sombra o halo periférico.
              Un óvalo con halo por reflejo sigue siendo 0. Un arco abierto con halo sigue siendo 6.
 Si la foto presenta estos síntomas, anota en la nota: "foto a través de vidrio".`.trim();
+
+// ─────────────────────────────────────────────────────────────
+// Orientación y formato variable — inyectado en los 6 prompts
+// ─────────────────────────────────────────────────────────────
+const ORIENTACION_Y_FORMATO = `
+ORIENTACIÓN DEL MEDIDOR:
+Los medidores en Colombia pueden estar instalados y fotografiados en CUALQUIER orientación:
+horizontal (tambores de izq. a der.), vertical (tambores de arriba a abajo), diagonal o invertido.
+· Si los tambores van de IZQUIERDA A DERECHA → lee de izq. a der. (dígito más significativo primero).
+· Si los tambores van de ARRIBA A ABAJO → lee de arriba a abajo (el dígito superior es el más significativo).
+· Si el medidor está INVERTIDO → ajusta la lectura al sentido natural del display, no al de la foto.
+NO asumas que los tambores están siempre horizontales. Identifica su orientación real en la imagen.
+
+CANTIDAD DE TAMBORES — NO ASUMAS UN NÚMERO FIJO:
+Colombia tiene medidores de distintos fabricantes con 5, 6, 7, 8 o más tambores.
+CUENTA los tambores que realmente ves — no inventes posiciones que no existen.
+
+SEPARADOR DECIMAL — DETECCIÓN SECUNDARIA:
+Después de leer todos los dígitos posición a posición, busca el separador decimal:
+· Cambio de color de fondo entre tambores (ej. negro → rojo) → separador antes del primer tambor rojo.
+· Punto físico (.) marcado en el marco de la ventanilla entre dos tambores.
+· Etiqueta o serigrafía del medidor con "m³" o "kWh" que indique cuántos decimales tiene.
+El color de los tambores es una PISTA SECUNDARIA del separador, no define la estructura principal.
+Si no hay señal clara del separador: reporta los dígitos sin punto y anota "separador no visible".`.trim();
 
 // ─────────────────────────────────────────────────────────────
 // Reglas anti-alucinación — inyectadas en los 6 prompts
@@ -176,7 +315,7 @@ Si solo algunos dígitos son visibles con certeza y el resto no se puede leer:
 → en la nota: "se observan parcialmente los dígitos [X, Y, Z]; el resto no es legible"`.trim();
 
 // ─────────────────────────────────────────────────────────────
-// PROMPTS — Primera pasada: enumeración posición a posición L→R
+// PROMPTS — Primera pasada: enumeración posición a posición
 // ─────────────────────────────────────────────────────────────
 const PROMPTS_COT = {
 
@@ -190,49 +329,45 @@ PASO 0 — VALIDACIÓN PREVIA (antes de leer cualquier dígito):
   b) ¿La imagen está lo suficientemente nítida para distinguir los dígitos? Si no → lectura = null, calidad = "mala".
   Si fallas (a) o (b), omite los pasos siguientes y responde directamente con el JSON de error.
 
-ANATOMÍA DEL DISPLAY:
-- Ventanilla rectangular ubicada en la parte frontal superior del medidor
-- Exactamente 8 ruedas numeradas visibles de izquierda a derecha
-- Ruedas 1–5 (fondo NEGRO): metros cúbicos — parte entera
-- Ruedas 6–8 (fondo ROJO): decimales de m³
-- Formato de salida: NNNNN.NNN  (ejemplo: 00201.655)
-
 ELEMENTOS A IGNORAR — no forman parte de la lectura:
 - Número de serie grabado o estampado en el cuerpo metálico del medidor
 - Stickers de apartamento (etiquetas amarillas, blancas o de papel)
 - Placa de identificación de la empresa de gas
 - Cualquier número impreso fuera de la ventanilla de tambores
 
-PROTOCOLO OBLIGATORIO — ejecuta cada paso en orden y documenta:
+${ORIENTACION_Y_FORMATO}
 
-PASO 1 — LOCALIZACIÓN: Identifica la ventanilla rectangular con los 8 tambores. Confirma que NO estás mirando el número de serie del cuerpo.
+PROTOCOLO OBLIGATORIO — ejecuta cada paso en orden:
 
-PASO 2 — CONTEO: Cuenta las ruedas visibles de izquierda a derecha. Confirma que hay exactamente 8 (si ves menos, indica cuántas en la nota).
+PASO 1 — LOCALIZACIÓN: Identifica la ventanilla/display de tambores. Confirma que NO estás leyendo el número de serie del cuerpo metálico.
 
-PASO 3 — LECTURA POSICIÓN A POSICIÓN (L→R):
-  · Pos 1 (negro): ¿qué dígito ves? → anota
-  · Pos 2 (negro): ¿qué dígito ves? → anota
-  · Pos 3 (negro): ¿qué dígito ves? → anota
-  · Pos 4 (negro): ¿qué dígito ves? → anota
-  · Pos 5 (negro): ¿qué dígito ves? → anota
-  · Pos 6 (rojo):  ¿qué dígito ves? → anota
-  · Pos 7 (rojo):  ¿qué dígito ves? → anota
-  · Pos 8 (rojo):  ¿qué dígito ves? → anota
+PASO 2 — CONTEO REAL: Cuenta exactamente cuántos tambores hay. Pueden ser 5, 6, 7, 8 o más — NO asumas un número fijo. Anota el conteo real.
 
-PASO 4 — TAMBORES EN TRANSICIÓN: Si un tambor muestra dos dígitos a la vez (rueda girando entre posiciones), usa SIEMPRE el dígito inferior. Ejemplo: entre 5 y 6 visibles → escribe 5.
+PASO 3 — LECTURA POSICIÓN A POSICIÓN:
+  Para cada tambor, en el orden del display (del más significativo al menos):
+  · Pos 1: ¿qué dígito ves? → anota
+  · Pos 2: ¿qué dígito ves? → anota
+  · Pos 3: ¿qué dígito ves? → anota
+  · ... continúa hasta el último tambor
+  Si el tambor no es legible → anota "?"
+
+PASO 4 — TAMBORES EN TRANSICIÓN: Si un tambor muestra dos dígitos a la vez (rueda girando entre posiciones), usa SIEMPRE el dígito inferior.
 
 ${AUDITORIA_VISUAL}
 
-PASO 6 — ENSAMBLAJE: une pos 1–5 + "." + pos 6–8 → lectura final.
+PASO 6 — ENSAMBLAJE:
+  · Si identificaste el separador decimal: parte entera + "." + decimales.
+  · Si NO hay señal clara del separador: escribe los dígitos sin punto y anota "separador no visible".
+  · Unidad: m³ (metros cúbicos de gas).
 
 CALIDAD DE FOTO:
 - "buena": display completamente nítido, sin reflejos, dígitos inequívocos
 - "aceptable": reflejo leve, poca luz o ángulo oblicuo, pero dígitos legibles
 - "mala": desenfocado, muy oscuro, ilegible — lectura imposible o muy dudosa
-Si no es "buena", añade motivo_calidad (frase corta: "reflejo en la ventanilla", "desenfocado", etc.).
+Si no es "buena", añade motivo_calidad (frase corta).
 
 CONFIANZA:
-- "alta": los 8 dígitos son inequívocos después de la auditoría
+- "alta": todos los dígitos leídos son inequívocos después de la auditoría
 - "baja": 2 o más dígitos siguen siendo dudosos tras la auditoría
 
 ${ANTI_ALUCINACION}
@@ -247,7 +382,7 @@ Responde SOLO con este JSON (sin texto previo ni posterior):
   "confianza": "alta",
   "calidad_foto": "buena",
   "motivo_calidad": null,
-  "nota": "descripción breve de lo observado en la ventanilla y los dígitos leídos"
+  "nota": "N tambores visibles; orientación; separador detectado; dígitos leídos"
 }`,
 
   agua: `Eres experto en lectura de medidores de agua domiciliario en Colombia.
@@ -260,40 +395,35 @@ PASO 0 — VALIDACIÓN PREVIA (antes de leer cualquier dígito):
   b) ¿La imagen está lo suficientemente nítida para distinguir los dígitos? Si no → lectura = null, calidad = "mala".
   Si fallas (a) o (b), omite los pasos siguientes y responde directamente con el JSON de error.
 
-ANATOMÍA DEL DISPLAY:
-- Ventanilla ovalada o rectangular en la parte frontal del medidor (carcasa azul o gris)
-- Exactamente 8 ruedas numeradas visibles de izquierda a derecha
-- Ruedas 1–4 (fondo NEGRO): metros cúbicos — parte entera
-- Ruedas 5–8 (fondo ROJO): decimales de m³
-- Formato de salida: NNNN.NNNN  (ejemplo: 0134.8423)
-
 ELEMENTOS A IGNORAR — no forman parte de la lectura:
 - Número de serie grabado o troquelado en el metal del cuerpo (puede parecer una lectura pero NO lo es)
 - Marca del fabricante (ACTARIS, Itron, Sensus, ISOIL, etc.)
 - Stickers de apartamento o de empresa de acueducto
 - Cualquier número impreso fuera de la ventanilla de tambores
 
-PROTOCOLO OBLIGATORIO — ejecuta cada paso en orden y documenta:
+${ORIENTACION_Y_FORMATO}
 
-PASO 1 — LOCALIZACIÓN: Identifica la ventanilla con los 8 tambores en el frente del medidor. Distingue la ventanilla del número de serie del cuerpo.
+PROTOCOLO OBLIGATORIO — ejecuta cada paso en orden:
 
-PASO 2 — CONTEO: Cuenta las ruedas de izquierda a derecha. Confirma exactamente 8.
+PASO 1 — LOCALIZACIÓN: Identifica la ventanilla/display de tambores en el frente del medidor. Distingue la ventanilla del número de serie del cuerpo.
 
-PASO 3 — LECTURA POSICIÓN A POSICIÓN (L→R):
-  · Pos 1 (negro): ¿qué dígito ves? → anota
-  · Pos 2 (negro): ¿qué dígito ves? → anota
-  · Pos 3 (negro): ¿qué dígito ves? → anota
-  · Pos 4 (negro): ¿qué dígito ves? → anota
-  · Pos 5 (rojo):  ¿qué dígito ves? → anota
-  · Pos 6 (rojo):  ¿qué dígito ves? → anota
-  · Pos 7 (rojo):  ¿qué dígito ves? → anota
-  · Pos 8 (rojo):  ¿qué dígito ves? → anota
+PASO 2 — CONTEO REAL: Cuenta exactamente cuántos tambores hay. Pueden ser 5, 6, 7, 8 o más — NO asumas un número fijo. Anota el conteo real.
 
-PASO 4 — TAMBORES EN TRANSICIÓN: Si un tambor muestra dos dígitos a la vez, usa el dígito INFERIOR. Si hay duda entre rojo y negro por reflejo, trátalo como NEGRO.
+PASO 3 — LECTURA POSICIÓN A POSICIÓN:
+  Para cada tambor, en el orden del display (del más significativo al menos):
+  · Pos 1: ¿qué dígito ves? → anota
+  · Pos 2: ¿qué dígito ves? → anota
+  · ... continúa hasta el último tambor
+  Si el tambor no es legible → anota "?"
+
+PASO 4 — TAMBORES EN TRANSICIÓN: Si un tambor muestra dos dígitos a la vez, usa el dígito INFERIOR.
 
 ${AUDITORIA_VISUAL}
 
-PASO 6 — ENSAMBLAJE: une pos 1–4 + "." + pos 5–8 → lectura final.
+PASO 6 — ENSAMBLAJE:
+  · Si identificaste el separador decimal: parte entera + "." + decimales.
+  · Si NO hay señal clara del separador: escribe los dígitos sin punto y anota "separador no visible".
+  · Unidad: m³ (metros cúbicos de agua).
 
 CALIDAD DE FOTO:
 - "buena": display completamente nítido, dígitos inequívocos
@@ -302,7 +432,7 @@ CALIDAD DE FOTO:
 Si no es "buena", añade motivo_calidad breve.
 
 CONFIANZA:
-- "alta": los 8 dígitos son inequívocos después de la auditoría
+- "alta": todos los dígitos leídos son inequívocos después de la auditoría
 - "baja": 2 o más dígitos siguen siendo dudosos
 
 ${ANTI_ALUCINACION}
@@ -317,7 +447,7 @@ Responde SOLO con este JSON (sin texto previo ni posterior):
   "confianza": "alta",
   "calidad_foto": "buena",
   "motivo_calidad": null,
-  "nota": "descripción breve de lo observado en la ventanilla y los dígitos leídos"
+  "nota": "N tambores visibles; orientación; separador detectado; dígitos leídos"
 }`,
 
   luz: `Eres experto en lectura de medidores de energía eléctrica domiciliario en Colombia.
@@ -330,46 +460,44 @@ PASO 0 — VALIDACIÓN PREVIA (antes de leer cualquier dígito):
   b) ¿La imagen está lo suficientemente nítida para distinguir los dígitos? Si no → lectura = null, calidad = "mala".
   Si fallas (a) o (b), omite los pasos siguientes y responde directamente con el JSON de error.
 
-ANATOMÍA DEL DISPLAY — dos tipos posibles:
-
-TIPO A — MECÁNICO (tambores giratorios):
-- Ventanilla rectangular con 8 ruedas numeradas de izquierda a derecha
-- Ruedas 1–5 (fondo NEGRO): kWh — parte entera
-- Ruedas 6–8 (fondo ROJO): decimales de kWh
-- Formato: NNNNN.NNN  (ejemplo: 00452.123)
-
-TIPO B — LCD (pantalla digital):
-- Pantalla plana con dígitos iluminados
-- Los decimales aparecen después de un punto (.) o coma (,) en la pantalla
-- Lee exactamente los dígitos que muestra la pantalla; no inventes posiciones
-- Formato: NNNNN.NNN
-
-ELEMENTOS A IGNORAR en ambos tipos:
+ELEMENTOS A IGNORAR:
 - Número de serie grabado o impreso en el cuerpo del medidor
 - Marca/modelo (EDMI, Landis+Gyr, ABB, Circutor, ZIV, etc.)
 - Stickers de empresa eléctrica, sellos de calibración
 - Números de tarifa o de circuito impresos alrededor del display
 
-PROTOCOLO OBLIGATORIO — ejecuta cada paso en orden y documenta:
+${ORIENTACION_Y_FORMATO}
 
-PASO 1 — TIPO DE DISPLAY: ¿Mecánico (tambores) o LCD (pantalla)?
+PROTOCOLO OBLIGATORIO — ejecuta cada paso en orden:
 
-PASO 2 — LOCALIZACIÓN: Identifica la ventanilla (mecánico) o la pantalla (LCD). Descarta número de serie.
+PASO 1 — TIPO DE DISPLAY: ¿Mecánico (tambores giratorios) o LCD (pantalla digital)?
 
-PASO 3 — CONTEO: Confirma 8 posiciones (mecánico) o cuenta los dígitos visibles antes y después del separador (LCD).
+PASO 2 — LOCALIZACIÓN: Identifica el display. Descarta número de serie.
 
-PASO 4 — LECTURA POSICIÓN A POSICIÓN (L→R):
-  Mecánico:
-    · Pos 1 (negro) · Pos 2 (negro) · Pos 3 (negro) · Pos 4 (negro) · Pos 5 (negro)
-    · Pos 6 (rojo)  · Pos 7 (rojo)  · Pos 8 (rojo)
-  LCD:
-    · Lee los dígitos de izquierda a derecha, identifica el separador decimal
+━━━ SI ES MECÁNICO (tambores) ━━━
 
-PASO 5 — TAMBORES EN TRANSICIÓN (mecánico): Si un tambor muestra dos dígitos → usa el INFERIOR.
+PASO 3 — CONTEO REAL: Cuenta los tambores visibles. Pueden ser 5, 6, 7, 8 o más — NO asumas un número. Algunos modelos tienen solo tambores de fondo rojo al final, otros tienen solo negros, otros mezclan. Cuenta lo que ves.
+
+PASO 4 — LECTURA POSICIÓN A POSICIÓN:
+  Para cada tambor en el orden natural del display (del más significativo al menos):
+  · Anota el dígito de cada posición.
+  · Tambor entre dos dígitos → usa el INFERIOR.
+  · Tambor ilegible → anota "?"
 
 ${AUDITORIA_VISUAL}
 
-PASO 7 — ENSAMBLAJE: une parte entera + "." + decimales → lectura final NNNNN.NNN.
+PASO 6 — ENSAMBLAJE:
+  · Si hay cambio de color entre tambores → el separador está antes del primer tambor de distinto color.
+  · Si hay punto físico marcado en el marco → úsalo como separador.
+  · Si no hay señal clara: escribe los dígitos sin punto y anota "separador no visible".
+  · Unidad: kWh.
+
+━━━ SI ES LCD (pantalla digital) ━━━
+
+PASO 3 — Lee los dígitos de izquierda a derecha. Identifica el separador decimal (punto o coma).
+PASO 4 — Anota parte entera y parte decimal.
+PASO 5 — Audita: ¿0↔8? ¿1↔7? ¿2↔5? ¿3↔8? en pantalla LCD.
+ENSAMBLAJE: parte entera + "." + parte decimal → lectura final.
 
 CALIDAD DE FOTO:
 - "buena": display completamente nítido, dígitos inequívocos
@@ -393,13 +521,12 @@ Responde SOLO con este JSON (sin texto previo ni posterior):
   "confianza": "alta",
   "calidad_foto": "buena",
   "motivo_calidad": null,
-  "nota": "tipo de display y descripción breve de los dígitos leídos"
+  "nota": "tipo display; N tambores; orientación; separador; dígitos leídos"
 }`,
 };
 
 // ─────────────────────────────────────────────────────────────
-// PROMPTS — Segunda pasada: enfoque por grupos de color (ángulo independiente)
-// Misma metodología, distinto punto de entrada → sin sesgo de la primera pasada
+// PROMPTS — Segunda pasada: verificación independiente (distinto ángulo)
 // ─────────────────────────────────────────────────────────────
 const PROMPTS_VERIFICACION = {
 
@@ -413,37 +540,36 @@ VALIDACIÓN PREVIA (obligatoria antes de cualquier lectura):
   b) ¿Puedes distinguir los dígitos con claridad? Si no → lectura = null, calidad = "mala".
   Si fallas (a) o (b), responde directamente con JSON de error sin proceder al método.
 
-MÉTODO — lee por grupos de color (no de izquierda a derecha):
+${ORIENTACION_Y_FORMATO}
 
-GRUPO NEGRO — metros cúbicos (parte entera):
-1. Localiza las 5 ruedas con fondo negro en la ventanilla
-2. Para cada rueda, de izquierda a derecha, anota el dígito visible
-3. Si una rueda está girando entre dos dígitos → escribe el dígito INFERIOR
-4. Resultado negro provisional: d1 d2 d3 d4 d5
+MÉTODO — lectura posición a posición con verificación por color:
 
-GRUPO ROJO — decimales de m³:
-5. Localiza las 3 ruedas con fondo rojo en la ventanilla (a la derecha de las negras)
-6. Para cada rueda, de izquierda a derecha, anota el dígito visible
-7. Si una rueda está girando entre dos dígitos → escribe el dígito INFERIOR
-8. Resultado rojo provisional: d6 d7 d8
+FASE 1 — Identifica la orientación del display (horizontal / vertical / inclinado).
+
+FASE 2 — Lee cada tambor en el orden natural del display (del más significativo al menos):
+  · Para cada posición: anota el dígito visible.
+  · Tambor en transición → usa el dígito INFERIOR.
+  · Tambor ilegible → "?"
+
+FASE 3 — Detecta el separador decimal:
+  · Busca cambio de color de fondo entre tambores (negro → rojo).
+  · Busca punto físico marcado en el marco de la ventanilla.
+  · Si lo encuentras: registra después de qué posición está.
+  · Si no hay señal: anota "separador no visible".
 
 ${AUDITORIA_VISUAL}
 
-9. Aplica la auditoría anterior a los 8 dígitos y corrige si corresponde.
+FASE 4 — Aplica la auditoría a cada dígito y corrige si corresponde.
 
 ENSAMBLAJE:
-11. Une: d1d2d3d4d5 + "." + d6d7d8 → formato NNNNN.NNN
+  · Con separador: parte entera + "." + decimales.
+  · Sin separador: dígitos sin punto.
+  · Unidad: m³.
 
-CALIDAD:
-- "buena" / "aceptable" / "mala"
-- Si no es "buena", añade motivo_calidad breve
-
-CONFIANZA:
-- "alta": todos los dígitos son inequívocos
-- "baja": 2 o más dígitos son dudosos
+CALIDAD: "buena" / "aceptable" / "mala". Si no es "buena", añade motivo_calidad breve.
+CONFIANZA: "alta" (todos inequívocos) / "baja" (2+ dudosos).
 
 ${ANTI_ALUCINACION}
-
 ${ES_MEDIDOR_REGLA}
 
 Responde ÚNICAMENTE con JSON (sin texto previo ni posterior):
@@ -454,7 +580,7 @@ Responde ÚNICAMENTE con JSON (sin texto previo ni posterior):
   "confianza": "alta | baja",
   "calidad_foto": "buena | aceptable | mala",
   "motivo_calidad": null,
-  "nota": "qué viste en el grupo negro y qué en el grupo rojo"
+  "nota": "orientación del display; N tambores; separador; dígitos leídos"
 }`,
 
   agua: `Analiza esta imagen de un medidor de agua domiciliario colombiano (carcasa azul o gris).
@@ -467,38 +593,35 @@ VALIDACIÓN PREVIA (obligatoria antes de cualquier lectura):
   b) ¿Puedes distinguir los dígitos con claridad? Si no → lectura = null, calidad = "mala".
   Si fallas (a) o (b), responde directamente con JSON de error sin proceder al método.
 
-MÉTODO — lee por grupos de color (no de izquierda a derecha):
+${ORIENTACION_Y_FORMATO}
 
-GRUPO ROJO — decimales de m³ (léelos PRIMERO para anclar la posición):
-1. Localiza las 4 ruedas con fondo rojo en la ventanilla (lado derecho)
-2. Para cada rueda, de izquierda a derecha, anota el dígito visible
-3. Si una rueda está girando entre dos dígitos → escribe el dígito INFERIOR
-4. Resultado rojo provisional: d5 d6 d7 d8
+MÉTODO — lectura posición a posición con verificación por color:
 
-GRUPO NEGRO — metros cúbicos (parte entera):
-5. Localiza las 4 ruedas con fondo negro (a la izquierda de las rojas)
-6. Para cada rueda, de izquierda a derecha, anota el dígito visible
-7. Si una rueda está girando entre dos dígitos → escribe el dígito INFERIOR
-8. Si hay duda entre rojo y negro por reflejo → trátalo como NEGRO
-9. Resultado negro provisional: d1 d2 d3 d4
+FASE 1 — Identifica la orientación del display (horizontal / vertical / inclinado).
+
+FASE 2 — Lee cada tambor en el orden natural del display (del más significativo al menos):
+  · Para cada posición: anota el dígito visible.
+  · Tambor en transición → usa el dígito INFERIOR.
+  · Tambor ilegible → "?"
+
+FASE 3 — Detecta el separador decimal:
+  · Busca cambio de color de fondo entre tambores.
+  · Busca punto físico en el marco.
+  · Si no hay señal: anota "separador no visible".
 
 ${AUDITORIA_VISUAL}
 
-10. Aplica la auditoría anterior a los 8 dígitos y corrige si corresponde.
+FASE 4 — Aplica la auditoría a cada dígito y corrige si corresponde.
 
 ENSAMBLAJE:
-12. Une: d1d2d3d4 + "." + d5d6d7d8 → formato NNNN.NNNN
+  · Con separador: parte entera + "." + decimales.
+  · Sin separador: dígitos sin punto.
+  · Unidad: m³.
 
-CALIDAD:
-- "buena" / "aceptable" / "mala"
-- Si no es "buena", añade motivo_calidad breve
-
-CONFIANZA:
-- "alta": todos los dígitos son inequívocos
-- "baja": 2 o más dígitos son dudosos
+CALIDAD: "buena" / "aceptable" / "mala". Si no es "buena", añade motivo_calidad breve.
+CONFIANZA: "alta" (todos inequívocos) / "baja" (2+ dudosos).
 
 ${ANTI_ALUCINACION}
-
 ${ES_MEDIDOR_REGLA}
 
 Responde ÚNICAMENTE con JSON (sin texto previo ni posterior):
@@ -509,7 +632,7 @@ Responde ÚNICAMENTE con JSON (sin texto previo ni posterior):
   "confianza": "alta | baja",
   "calidad_foto": "buena | aceptable | mala",
   "motivo_calidad": null,
-  "nota": "qué viste en el grupo rojo y qué en el grupo negro"
+  "nota": "orientación del display; N tambores; separador; dígitos leídos"
 }`,
 
   luz: `Analiza esta imagen de un medidor de electricidad domiciliario colombiano.
@@ -522,50 +645,35 @@ VALIDACIÓN PREVIA (obligatoria antes de cualquier lectura):
   b) ¿Puedes distinguir los dígitos con claridad? Si no → lectura = null, calidad = "mala".
   Si fallas (a) o (b), responde directamente con JSON de error sin proceder al método.
 
+${ORIENTACION_Y_FORMATO}
+
 PASO PREVIO — IDENTIFICA EL TIPO DE DISPLAY:
-- MECÁNICO: ruedas numeradas con fondos de color (negro y rojo)
+- MECÁNICO: ruedas numeradas con fondos de color (pueden ser todos negros, todos rojos, o mezcla)
 - LCD: pantalla digital plana con números iluminados
 
-━━━ SI ES MECÁNICO — lee por grupos de color ━━━
+━━━ SI ES MECÁNICO — lee posición a posición ━━━
 
-GRUPO ROJO — decimales de kWh (léelos PRIMERO):
-1. Localiza las 3 ruedas con fondo rojo (lado derecho de la ventanilla)
-2. Lee cada una de izquierda a derecha
-3. Tambor entre dos dígitos → usa el INFERIOR
-4. Resultado rojo provisional: d6 d7 d8
-
-GRUPO NEGRO — kWh enteros:
-5. Localiza las 5 ruedas con fondo negro (lado izquierdo)
-6. Lee cada una de izquierda a derecha
-7. Tambor entre dos dígitos → usa el INFERIOR
-8. Resultado negro provisional: d1 d2 d3 d4 d5
+FASE 1 — Identifica la orientación (horizontal / vertical / inclinado).
+FASE 2 — Cuenta cuántos tambores hay (pueden ser 5, 6, 7, 8 — NO asumas un número).
+FASE 3 — Lee cada tambor en el orden natural del display (del más significativo al menos).
+  · Tambor en transición → usa el INFERIOR.
+FASE 4 — Detecta el separador: cambio de color de fondo, punto físico en el marco, o "separador no visible".
 
 ${AUDITORIA_VISUAL}
 
-9. Aplica la auditoría anterior a los 8 dígitos (o a los dígitos LCD) y corrige si corresponde.
-
-ENSAMBLAJE: d1d2d3d4d5 + "." + d6d7d8 → NNNNN.NNN
+ENSAMBLAJE: parte entera + "." + decimales (o sin punto si no hay separador). Unidad: kWh.
 
 ━━━ SI ES LCD — lee por secciones del separador ━━━
 
-1. Localiza el separador decimal (punto o coma en la pantalla)
-2. Lee los dígitos a la DERECHA del separador (decimales): anótalos → parte decimal
-3. Lee los dígitos a la IZQUIERDA del separador (enteros): anótalos → parte entera
-4. Ajusta con ceros a la izquierda si la parte entera tiene menos de 5 dígitos
-5. Audita: ¿0↔8? ¿1↔7? ¿3↔8? en display LCD
+1. Localiza el separador decimal (punto o coma en la pantalla).
+2. Lee dígitos a la izquierda (enteros) y a la derecha (decimales).
+3. Audita: ¿0↔8? ¿1↔7? ¿2↔5? ¿3↔8? en pantalla LCD.
+ENSAMBLAJE: parte entera + "." + parte decimal. Unidad: kWh.
 
-ENSAMBLAJE: parte entera (5 dígitos) + "." + parte decimal (3 dígitos) → NNNNN.NNN
-
-CALIDAD:
-- "buena" / "aceptable" / "mala"
-- Si no es "buena", añade motivo_calidad breve
-
-CONFIANZA:
-- "alta": todos los dígitos son inequívocos
-- "baja": 2 o más dígitos son dudosos
+CALIDAD: "buena" / "aceptable" / "mala". Si no es "buena", añade motivo_calidad breve.
+CONFIANZA: "alta" (todos inequívocos) / "baja" (2+ dudosos).
 
 ${ANTI_ALUCINACION}
-
 ${ES_MEDIDOR_REGLA}
 
 Responde ÚNICAMENTE con JSON (sin texto previo ni posterior):
@@ -576,7 +684,7 @@ Responde ÚNICAMENTE con JSON (sin texto previo ni posterior):
   "confianza": "alta | baja",
   "calidad_foto": "buena | aceptable | mala",
   "motivo_calidad": null,
-  "nota": "tipo de display y qué viste en cada grupo"
+  "nota": "tipo display; orientación; N tambores; separador; dígitos leídos"
 }`,
 };
 
@@ -610,6 +718,10 @@ async function analizarMedidor(imagePath, tipo, { modo = 'rapido' } = {}) {
     };
   }
 
+  // ── Esperar slot de concurrencia antes de preprocesar o llamar a la IA ──
+  await _tomarSlotOCR();
+  logger.info(`OCR slot tomado (activos: ${_ocrActive}/${OCR_MAX_CONCURRENT}) — ${path.basename(imagePath)}`);
+
   let processedPath = null;
   let workingBuffer = imageBuffer;
   try {
@@ -624,7 +736,7 @@ async function analizarMedidor(imagePath, tipo, { modo = 'rapido' } = {}) {
   const prompt    = PROMPTS_COT[tipo] || PROMPTS_COT.luz;
 
   try {
-    const json1   = await llamarModelo(workingBuffer, mediaType, prompt);
+    const json1   = await llamarModeloConRetry(workingBuffer, mediaType, prompt);
     const result1 = parsearResultado(json1);
 
     // Segunda pasada solo cuando la primera es genuinamente incierta
@@ -636,7 +748,7 @@ async function analizarMedidor(imagePath, tipo, { modo = 'rapido' } = {}) {
     if (necesitaVerificacion) {
       try {
         const prompt2  = PROMPTS_VERIFICACION[tipo] || PROMPTS_VERIFICACION.luz;
-        const json2    = await llamarModelo(workingBuffer, mediaType, prompt2);
+        const json2    = await llamarModeloConRetry(workingBuffer, mediaType, prompt2);
         const result2  = parsearResultado(json2);
 
         // Primera dijo no-medidor pero la segunda sí → confiar en la segunda
@@ -690,6 +802,8 @@ async function analizarMedidor(imagePath, tipo, { modo = 'rapido' } = {}) {
       requiere_revision: true, nota: 'Error al procesar la imagen con IA',
     };
   } finally {
+    _liberarSlotOCR();
+    logger.info(`OCR slot liberado (activos: ${_ocrActive}/${OCR_MAX_CONCURRENT}) — ${path.basename(imagePath)}`);
     if (processedPath) {
       try { fs.unlinkSync(processedPath); } catch {}
     }
