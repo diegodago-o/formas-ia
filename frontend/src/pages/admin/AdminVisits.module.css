@@ -50,6 +50,26 @@
   font-weight: 600;
   white-space: nowrap;
 }
+
+/* Columnas ordenables */
+.thSortable {
+  cursor: pointer;
+  user-select: none;
+}
+.thSortable:hover { background: var(--primary-dark, #1e40af); }
+.thSorted { background: var(--primary-dark, #1e3a8a) !important; }
+
+.thContent {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.sortIcon {
+  font-size: 0.65rem;
+  opacity: 0.75;
+  flex-shrink: 0;
+}
+.thSorted .sortIcon { opacity: 1; }
 .table td {
   padding: 11px 12px;
   border-bottom: 1px solid var(--border);

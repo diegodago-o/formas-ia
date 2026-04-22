@@ -49,6 +49,9 @@ router.get('/visits', ...isAdmin, ah(async (req, res) => {
   if (requiere_revision === '1') {
     conditions.push('EXISTS (SELECT 1 FROM medidores m WHERE m.visita_id = v.id AND m.requiere_revision = 1)');
   }
+  if (requiere_revision === '0') {
+    conditions.push('NOT EXISTS (SELECT 1 FROM medidores m WHERE m.visita_id = v.id AND m.requiere_revision = 1)');
+  }
 
   const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
   const [[{ total }]] = await pool.query(
