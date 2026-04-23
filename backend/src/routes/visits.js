@@ -51,17 +51,52 @@ router.post(
 // ─────────────────────────────────────────────
 // OCR asíncrono post-guardado
 // ─────────────────────────────────────────────
-async function runOcrForMedidor(medidorId, absoluteFotoPath, tipo, lecturaAuditor) {
+// ─────────────────────────────────────────────
+// Auto-cierre compartido (subsanar + admin)
+// Cierra la visita automáticamente cuando todos
+// sus medidores dejan de tener requiere_revision=1
+// ─────────────────────────────────────────────
+async function checkAutoCloseVisita(visita_id, userId) {
+  try {
+    const [[{ pendientes }]] = await pool.query(
+      'SELECT COUNT(*) AS pendientes FROM medidores WHERE visita_id = ? AND requiere_revision = 1',
+      [visita_id]
+    );
+    if (pendientes > 0) return;
+
+    const [[visita]] = await pool.query('SELECT id, estado FROM visitas WHERE id = ?', [visita_id]);
+    if (!visita || visita.estado !== 'pendiente') return;
+
+    const [meds] = await pool.query(
+      'SELECT tipo, estado_revision_ocr FROM medidores WHERE visita_id = ?',
+      [visita_id]
+    );
+    const rechazados = meds.filter(m => m.estado_revision_ocr === 'rechazado');
+    const nuevoEstado   = rechazados.length > 0 ? 'rechazada' : 'aprobada';
+    const motivoRechazo = rechazados.length > 0
+      ? `Medidor(es) rechazado(s) automáticamente: ${rechazados.map(m => m.tipo).join(', ')}`
+      : null;
+
+    await pool.query(
+      `UPDATE visitas SET estado = ?, motivo_rechazo = ?, revisado_por = ?, revisado_en = NOW() WHERE id = ?`,
+      [nuevoEstado, motivoRechazo, userId, visita_id]
+    );
+  } catch (err) {
+    logger.error(`checkAutoCloseVisita failed for visita ${visita_id}: ${err.message}`);
+  }
+}
+
+async function runOcrForMedidor(medidorId, absoluteFotoPath, tipo, lecturaAuditor, auditorId = null) {
   try {
     const result = await analizarMedidor(absoluteFotoPath, tipo, { modo: 'preciso' });
 
     const [rows] = await pool.query(
-      'SELECT delta, sin_acceso FROM medidores WHERE id = ?',
+      'SELECT delta, sin_acceso, visita_id FROM medidores WHERE id = ?',
       [medidorId]
     );
     if (!rows.length) return;
 
-    const { delta, sin_acceso } = rows[0];
+    const { delta, sin_acceso, visita_id } = rows[0];
 
     const flagDelta      = delta !== null && delta <= 0;
     const flagAcceso     = !!sin_acceso;
@@ -92,6 +127,11 @@ async function runOcrForMedidor(medidorId, absoluteFotoPath, tipo, lecturaAudito
         medidorId,
       ]
     );
+
+    // En flujo de subsanación: si OCR sale limpio, verificar cierre automático de visita
+    if (requiereRevision === 0 && auditorId) {
+      await checkAutoCloseVisita(visita_id, auditorId);
+    }
   } catch (err) {
     logger.error(`OCR async failed for medidor ${medidorId}: ${err.message}`);
   }
@@ -264,6 +304,101 @@ router.patch('/:id/anular', authMiddleware, ah(async (req, res) => {
   }
   await pool.query('UPDATE visitas SET estado = ? WHERE id = ?', ['anulada', req.params.id]);
   res.json({ ok: true });
+}));
+
+// ─────────────────────────────────────────────
+// POST /api/visits/:id/subsanar
+// Auditor corrige medidores rechazados y re-envía
+// ─────────────────────────────────────────────
+router.post('/:id/subsanar', authMiddleware, ah(async (req, res) => {
+  // 1. Validar visita
+  const [[visita]] = await pool.query(
+    'SELECT id, estado, auditor_id FROM visitas WHERE id = ?',
+    [req.params.id]
+  );
+  if (!visita) return res.status(404).json({ error: 'Visita no encontrada' });
+  if (visita.auditor_id !== req.user.id) return res.status(403).json({ error: 'No autorizado' });
+  if (visita.estado !== 'rechazada') {
+    return res.status(400).json({ error: 'Solo se pueden subsanar visitas rechazadas' });
+  }
+
+  // 2. Obtener medidores rechazados
+  const [rechazados] = await pool.query(
+    "SELECT id, tipo FROM medidores WHERE visita_id = ? AND estado_revision_ocr = 'rechazado'",
+    [req.params.id]
+  );
+  if (!rechazados.length) {
+    return res.status(400).json({ error: 'No hay medidores rechazados para subsanar' });
+  }
+
+  const { medidores: medBody = {} } = req.body;
+  const ocrQueue = [];
+
+  for (const med of rechazados) {
+    const datos = medBody[med.id];
+    if (!datos) continue;
+
+    const lectura = datos.lectura ? datos.lectura.replace(',', '.') : null;
+
+    if (datos.foto_path) {
+      // Nueva foto → reset completo + OCR pendiente
+      await pool.query(
+        `UPDATE medidores SET
+           foto_path           = ?,
+           lectura_confirmada  = COALESCE(?, lectura_confirmada),
+           lectura_ocr         = NULL,
+           confianza_ocr       = NULL,
+           calidad_foto        = 'buena',
+           motivo_calidad      = NULL,
+           nota_ocr            = NULL,
+           es_medidor          = 1,
+           requiere_revision   = 1,
+           estado_revision_ocr = NULL,
+           revisado_por        = NULL,
+           revisado_en         = NULL
+         WHERE id = ?`,
+        [datos.foto_path, lectura, med.id]
+      );
+      ocrQueue.push({ medidorId: med.id, foto_path: datos.foto_path, tipo: med.tipo, lectura });
+    } else if (lectura) {
+      // Solo lectura nueva (sin foto) → corrección manual, sin OCR
+      await pool.query(
+        `UPDATE medidores SET
+           lectura_confirmada  = ?,
+           requiere_revision   = 0,
+           estado_revision_ocr = 'corregido',
+           revisado_por        = NULL,
+           revisado_en         = NULL
+         WHERE id = ?`,
+        [lectura, med.id]
+      );
+    }
+  }
+
+  // 3. Resetear visita a pendiente
+  await pool.query(
+    "UPDATE visitas SET estado = 'pendiente', motivo_rechazo = NULL WHERE id = ?",
+    [req.params.id]
+  );
+
+  // 4. Si no hay fotos nuevas (todo fue corrección manual), verificar cierre inmediato
+  if (ocrQueue.length === 0) {
+    await checkAutoCloseVisita(req.params.id, req.user.id);
+  }
+
+  res.json({ ok: true });
+
+  // 5. OCR en background para las fotos nuevas
+  if (ocrQueue.length > 0) {
+    const auditorId = req.user.id;
+    setImmediate(() => {
+      const uploadsDir = path.join(__dirname, '../../', process.env.UPLOADS_DIR || 'uploads');
+      for (const { medidorId, foto_path, tipo, lectura } of ocrQueue) {
+        const absolutePath = path.join(uploadsDir, foto_path);
+        runOcrForMedidor(medidorId, absolutePath, tipo, lectura, auditorId);
+      }
+    });
+  }
 }));
 
 // ─────────────────────────────────────────────
