@@ -245,8 +245,8 @@ export default function MeterField({ tipo, data, onChange, onFile, isOnline = tr
               type="text"
               inputMode="decimal"
               value={data.lectura}
-              onChange={e => onChange('lectura', e.target.value)}
-              placeholder="Ej: 00201.234"
+              onChange={e => onChange('lectura', e.target.value.replace(/\./g, ','))}
+              placeholder="Ej: 00201,234"
               autoFocus
             />
             <button

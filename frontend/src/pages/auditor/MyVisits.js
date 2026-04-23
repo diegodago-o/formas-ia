@@ -187,7 +187,7 @@ export default function MyVisits() {
                     <div className={styles.meterPills}>
                       {['luz', 'agua', 'gas'].map(tipo => {
                         const m    = d.medidores?.[tipo];
-                        const done = m?.lectura || m?.sin_acceso || m?.foto_path;
+                        const done = m?.lectura || m?.sin_acceso || m?.foto_path || m?.foto_base64 || m?.foto_file || m?.foto;
                         return (
                           <span
                             key={tipo}

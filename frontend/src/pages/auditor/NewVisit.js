@@ -178,12 +178,14 @@ export default function NewVisit() {
         const restored = {};
         for (const tipo of ['luz', 'agua', 'gas']) {
           const m = draft.medidores[tipo] || { ...EMPTY_MEDIDOR };
-          // Prioridad: URL del servidor > blob desde foto_file > base64
+          // Prioridad: URL servidor > foto_file > foto (campo legacy) > base64
           let preview = null;
           if (m.foto_path) {
             preview = `/uploads/${m.foto_path}`;
           } else if (m.foto_file) {
             preview = URL.createObjectURL(m.foto_file);
+          } else if (m.foto) {
+            preview = URL.createObjectURL(m.foto);
           } else if (m.foto_base64) {
             preview = m.foto_base64; // data URL funciona directamente como src
           }
@@ -209,10 +211,11 @@ export default function NewVisit() {
     clearTimeout(autoSaveTimer.current);
     autoSaveTimer.current = setTimeout(async () => {
       try {
-        // Quitar preview y foto_file (no sobreviven IDB); foto_base64 sí persiste
+        // Quitar solo preview (blob URL no sobrevive IDB).
+        // foto_file (File/Blob) SÍ es serializable en IDB — no lo eliminamos.
         const medidoresForSave = {};
         for (const tipo of ['luz', 'agua', 'gas']) {
-          medidoresForSave[tipo] = { ...medidores[tipo], preview: null, foto_file: null };
+          medidoresForSave[tipo] = { ...medidores[tipo], preview: null };
         }
 
         // Intentar obtener nombres desde arrays cargados, fallback al catálogo global
@@ -378,14 +381,26 @@ export default function NewVisit() {
     if (currentDraftId) {
       const medidoresForSave = {};
       for (const tipo of ['luz', 'agua', 'gas']) {
-        medidoresForSave[tipo] = { ...medidores[tipo], preview: null, foto_file: null };
+        // Solo quitar preview (blob URL efímero); foto_file (File/Blob) sí persiste en IDB.
+        medidoresForSave[tipo] = { ...medidores[tipo], preview: null };
       }
+      const conjuntoNombreGuard =
+        conjuntos.find(c => String(c.id) === String(conjuntoId))?.nombre ||
+        allConjuntos.find(c => String(c.id) === String(conjuntoId))?.nombre || '';
+      const torreNombreGuard =
+        torres.find(t => String(t.id) === String(torreId))?.nombre ||
+        allTorres.find(t => String(t.id) === String(torreId))?.nombre || '';
       // Await para que IDB termine de escribir antes de navegar
       await updateDraft(currentDraftId, {
         ciudadId, conjuntoId, torreId, apartamento,
         latitud, longitud, gpsMode,
         observaciones,
         medidores: medidoresForSave,
+        _meta: {
+          ciudadNombre:   ciudades.find(c => String(c.id) === String(ciudadId))?.nombre || '',
+          conjuntoNombre: conjuntoNombreGuard,
+          torreNombre:    torreNombreGuard,
+        },
       }).catch(() => {});
     }
     navigate('/mis-visitas');

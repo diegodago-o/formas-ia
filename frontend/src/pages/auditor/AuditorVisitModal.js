@@ -135,7 +135,7 @@ export default function AuditorVisitModal({ visitId, autoAnular, onClose, onUpda
   const handleLecturaChange = (medidorId, value) => {
     setSubsanarData(prev => ({
       ...prev,
-      [medidorId]: { ...prev[medidorId], lectura: value },
+      [medidorId]: { ...prev[medidorId], lectura: value.replace(/\./g, ',') },
     }));
   };
 
@@ -470,7 +470,7 @@ export default function AuditorVisitModal({ visitId, autoAnular, onClose, onUpda
                             <input
                               type="text"
                               inputMode="decimal"
-                              placeholder="Ej: 00201.126"
+                              placeholder="Ej: 00201,126"
                               value={datos.lectura || ''}
                               onChange={e => handleLecturaChange(m.id, e.target.value)}
                               className={styles.subsanarInput}

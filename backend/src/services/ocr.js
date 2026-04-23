@@ -1,9 +1,10 @@
-const OpenAI = require('openai');
-const fs     = require('fs');
-const path   = require('path');
-const os     = require('os');
-const sharp  = require('sharp');
-const logger = require('../middleware/logger');
+const OpenAI    = require('openai');
+const fs        = require('fs');
+const path      = require('path');
+const os        = require('os');
+const sharp     = require('sharp');
+const logger    = require('../middleware/logger');
+const Tesseract = require('node-tesseract-ocr');
 
 const client      = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4o';
@@ -90,7 +91,15 @@ async function preprocessImage(inputPath) {
 // Con 30 000 TPM y ~2 600 tokens/imagen → máx ~11 imágenes/min
 // Limitar a 2 concurrentes + retry hace que las colas drenen solas
 // ─────────────────────────────────────────────────────────────
-const OCR_MAX_CONCURRENT = parseInt(process.env.OCR_MAX_CONCURRENT || '2', 10);
+// Límite de concurrencia — 1 por defecto para no superar 30 000 TPM.
+// Con ~2 600 tokens/imagen y 6 s de pausa = ~6 imágenes/min = ~15 600 TPM → margen seguro.
+// Si el plan de OpenAI tiene más TPM, aumentar OCR_MAX_CONCURRENT en .env.
+const OCR_MAX_CONCURRENT = parseInt(process.env.OCR_MAX_CONCURRENT || '1', 10);
+// Pausa mínima DESPUÉS de cada llamada antes de liberar el slot.
+// Evita que la cola vacíe el límite TPM en ráfagas cortas.
+// Fórmula: OCR_MIN_DELAY_MS = 60000 / (TPM_LIMIT / TOKENS_POR_IMAGEN / MAX_CONCURRENT)
+// Ejemplo 30 000 TPM / 2 600 / 1 ≈ 11,5 llamadas/min → 5 200 ms. Usamos 6 000 por margen.
+const OCR_MIN_DELAY_MS = parseInt(process.env.OCR_MIN_DELAY_MS || '6000', 10);
 let _ocrActive = 0;
 const _ocrQueue = [];
 
@@ -132,27 +141,49 @@ async function llamarModelo(imageBuffer, mediaType, prompt) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// Wrapper con reintentos automáticos ante 429
-// OpenAI devuelve "try again in 5.188s" — lo usamos exactamente
+// Wrapper con reintentos automáticos ante 429, 500 y JSON inválido
+//
+// PROBLEMA con 429 en ráfaga: si N workers esperan el mismo tiempo
+// indicado por OpenAI, todos reintentarán a la vez y volverán a chocar.
+// Solución: añadir JITTER (tiempo aleatorio extra) para escalonar reintentos.
+//
+// También se reintenta en:
+//   - 500 Internal Server Error (error temporal de OpenAI)
+//   - "Respuesta sin JSON válido" (modelo devuelve texto plano por sobrecarga)
 // ─────────────────────────────────────────────────────────────
-async function llamarModeloConRetry(imageBuffer, mediaType, prompt, maxRetries = 4) {
+async function llamarModeloConRetry(imageBuffer, mediaType, prompt, maxRetries = 6) {
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
       return await llamarModelo(imageBuffer, mediaType, prompt);
     } catch (err) {
-      const msg = err.message || '';
-      const is429 = err.status === 429 || msg.startsWith('429');
-      if (is429 && attempt < maxRetries) {
-        // Leer el tiempo exacto que indica OpenAI: "try again in 5.188s"
-        const hint = msg.match(/try again in ([\d.]+)s/i);
-        const waitMs = hint
-          ? Math.ceil(parseFloat(hint[1]) * 1000) + 1000   // margen +1 s
-          : Math.min(8000 * (attempt + 1), 60000);          // fallback exponencial
-        logger.warn(`OCR 429 rate-limit — esperando ${waitMs}ms (intento ${attempt + 1}/${maxRetries}): ${path.basename(imageBuffer.length.toString())}`);
-        await new Promise(r => setTimeout(r, waitMs));
+      const msg    = err.message || '';
+      const is429  = err.status === 429 || msg.startsWith('429');
+      const is500  = err.status === 500 || msg.startsWith('500');
+      const isJson = msg === 'Respuesta sin JSON válido';
+
+      const shouldRetry = (is429 || is500 || isJson) && attempt < maxRetries;
+
+      if (!shouldRetry) throw err;
+
+      let waitMs;
+      if (is429) {
+        // Respetar el tiempo que pide OpenAI + margen + jitter aleatorio
+        // El jitter evita que múltiples workers reintentos en el mismo instante
+        const hint    = msg.match(/try again in ([\d.]+)s/i);
+        const baseMs  = hint
+          ? Math.ceil(parseFloat(hint[1]) * 1000) + 1000   // sugerido + 1 s
+          : Math.min(6000 * (attempt + 1), 60000);          // fallback exponencial
+        const jitter  = Math.floor(Math.random() * Math.min(baseMs, 5000)); // hasta 5 s extra
+        waitMs = baseMs + jitter;
       } else {
-        throw err;
+        // 500 o JSON inválido → backoff exponencial con jitter leve
+        waitMs = Math.min(3000 * Math.pow(2, attempt), 30000)
+               + Math.floor(Math.random() * 2000);
       }
+
+      const tipo = is429 ? '429 rate-limit' : is500 ? '500 server error' : 'JSON inválido';
+      logger.warn(`OCR ${tipo} — esperando ${waitMs}ms (intento ${attempt + 1}/${maxRetries})`);
+      await new Promise(r => setTimeout(r, waitMs));
     }
   }
 }
@@ -689,6 +720,63 @@ Responde ÚNICAMENTE con JSON (sin texto previo ni posterior):
 };
 
 // ─────────────────────────────────────────────────────────────
+// Comparación de lecturas por secuencia de dígitos
+// Ignora separador decimal (coma, punto) y ceros a la izquierda.
+// "0082.405", "0082,405" y "0082405" son el mismo medidor.
+// Compara desde la izquierda hasta el largo de la lectura más corta.
+// ─────────────────────────────────────────────────────────────
+function coincidenciaDigitos(l1, l2) {
+  if (!l1 || !l2) return false;
+  const d1 = l1.replace(/[^0-9]/g, ''); // solo dígitos
+  const d2 = l2.replace(/[^0-9]/g, '');
+  if (d1.length < 4 || d2.length < 4) return false; // secuencia muy corta → no concluyente
+  const n = Math.min(d1.length, d2.length);
+  return d1.substring(0, n) === d2.substring(0, n);
+}
+
+// ─────────────────────────────────────────────────────────────
+// Lectura con Tesseract — validador local de dígitos
+// Corre en paralelo con GPT-4o para no añadir latencia.
+// Si ambos coinciden → alta confianza, se omite la segunda pasada GPT-4o.
+// Retorna la secuencia de dígitos más larga encontrada, o null si falla.
+// ─────────────────────────────────────────────────────────────
+async function leerConTesseract(imagePath) {
+  const tmpPath = path.join(os.tmpdir(), `tess_${Date.now()}.png`);
+  try {
+    // Preprocesar para maximizar contraste de dígitos:
+    // escala de grises → normalizar histograma → umbral binario → ampliar
+    await sharp(imagePath)
+      .greyscale()
+      .normalize()
+      .sharpen({ sigma: 1.5 })
+      .threshold(128)
+      .resize(1600, null, { fit: 'inside', withoutEnlargement: false })
+      .png()
+      .toFile(tmpPath);
+
+    const text = await Tesseract.recognize(tmpPath, {
+      lang: 'eng',
+      oem: '1',   // LSTM
+      psm: '6',   // bloque de texto uniforme
+      tessedit_char_whitelist: '0123456789', // solo dígitos, sin punto ni coma
+    });
+
+    if (!text?.trim()) return null;
+
+    // Extraer todas las secuencias de dígitos y quedarse con la más larga (≥4)
+    const secuencias = text.replace(/\s+/g, '').match(/\d+/g);
+    if (!secuencias) return null;
+    const candidatos = secuencias.filter(s => s.length >= 4);
+    if (!candidatos.length) return null;
+    return candidatos.reduce((a, b) => a.length >= b.length ? a : b);
+  } catch {
+    return null; // Tesseract no disponible o falla → no bloquea el flujo principal
+  } finally {
+    try { fs.unlinkSync(tmpPath); } catch {}
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
 // Función principal
 // ─────────────────────────────────────────────────────────────
 async function analizarMedidor(imagePath, tipo, { modo = 'rapido' } = {}) {
@@ -736,10 +824,34 @@ async function analizarMedidor(imagePath, tipo, { modo = 'rapido' } = {}) {
   const prompt    = PROMPTS_COT[tipo] || PROMPTS_COT.luz;
 
   try {
-    const json1   = await llamarModeloConRetry(workingBuffer, mediaType, prompt);
-    const result1 = parsearResultado(json1);
+    // ── GPT-4o (1ª pasada) y Tesseract corren en PARALELO ─────────────
+    // Tesseract es local y no consume TPM — no cuesta nada correrlo siempre.
+    // Si ambos coinciden en la secuencia de dígitos → alta confianza
+    // y se omite la 2ª pasada GPT-4o (ahorra ~50% de tokens en fotos claras).
+    const [gptSettled, tessSettled] = await Promise.allSettled([
+      llamarModeloConRetry(workingBuffer, mediaType, prompt).then(j => parsearResultado(j)),
+      leerConTesseract(processedPath || imagePath),
+    ]);
 
-    // Segunda pasada solo cuando la primera es genuinamente incierta
+    if (gptSettled.status === 'rejected') throw gptSettled.reason;
+
+    const result1          = gptSettled.value;
+    const tesseractLectura = tessSettled.status === 'fulfilled' ? tessSettled.value : null;
+
+    logger.info(`OCR Tesseract="${tesseractLectura || 'null'}" GPT-4o="${result1.lectura || 'null'}" — ${path.basename(imagePath)}`);
+
+    // ── Tesseract confirma GPT-4o → alta confianza, sin 2ª pasada ─────
+    if (result1.lectura && tesseractLectura && coincidenciaDigitos(result1.lectura, tesseractLectura)) {
+      logger.info(`OCR Tess+GPT coinciden → alta confianza (sin 2ª pasada)`);
+      return {
+        ...result1,
+        confianza:         'alta',
+        requiere_revision: result1.calidad_foto === 'mala' || !result1.es_medidor,
+        nota:              `[✓ Tess:${tesseractLectura}] ${result1.nota || ''}`.trim(),
+      };
+    }
+
+    // ── Sin confirmación Tesseract → 2ª pasada GPT-4o si es incierto ──
     const necesitaVerificacion = result1.confianza === 'baja'
       || result1.calidad_foto !== 'buena'
       || result1.es_medidor === false
@@ -757,22 +869,17 @@ async function analizarMedidor(imagePath, tipo, { modo = 'rapido' } = {}) {
         }
 
         if (result1.lectura && result2.lectura) {
-          if (result1.lectura === result2.lectura) {
-            // Consenso → confirmar con alta confianza
+          // Coinciden en dígitos (ignora separador) → consenso confirmado
+          if (coincidenciaDigitos(result1.lectura, result2.lectura)) {
             return {
               ...result1,
               confianza:         'alta',
               requiere_revision: result1.calidad_foto === 'mala' || !result1.es_medidor,
-              nota:              `[Verificado] ${result1.nota}`,
+              nota:              `[Verificado 2ª] ${result1.nota}`,
             };
           } else {
-            // Discrepan: si la primera tenía alta confianza → confiar en ella
-            // Si ambas eran inciertas → flag para admin
             if (result1.confianza === 'alta') {
-              return {
-                ...result1,
-                nota: `[Confirmado 1ª pasada] ${result1.nota}`,
-              };
+              return { ...result1, nota: `[Confirmado 1ª pasada] ${result1.nota}` };
             }
             return {
               ...result1,
@@ -802,12 +909,18 @@ async function analizarMedidor(imagePath, tipo, { modo = 'rapido' } = {}) {
       requiere_revision: true, nota: 'Error al procesar la imagen con IA',
     };
   } finally {
-    _liberarSlotOCR();
-    logger.info(`OCR slot liberado (activos: ${_ocrActive}/${OCR_MAX_CONCURRENT}) — ${path.basename(imagePath)}`);
+    // 1. Limpiar archivo temporal
     if (processedPath) {
       try { fs.unlinkSync(processedPath); } catch {}
     }
+    // 2. Pausa mínima para no superar el límite TPM antes de liberar el slot
+    if (OCR_MIN_DELAY_MS > 0) {
+      await new Promise(r => setTimeout(r, OCR_MIN_DELAY_MS));
+    }
+    // 3. Liberar slot (puede despertar la siguiente llamada en cola)
+    _liberarSlotOCR();
+    logger.info(`OCR slot liberado (activos: ${_ocrActive}/${OCR_MAX_CONCURRENT}) — ${path.basename(imagePath)}`);
   }
 }
 
-module.exports = { analizarMedidor };
+module.exports = { analizarMedidor, coincidenciaDigitos };

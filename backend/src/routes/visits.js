@@ -3,7 +3,7 @@ const path = require('path');
 const { pool } = require('../models/db');
 const { authMiddleware } = require('../middleware/auth');
 const upload = require('../middleware/upload');
-const { analizarMedidor } = require('../services/ocr');
+const { analizarMedidor, coincidenciaDigitos } = require('../services/ocr');
 const logger = require('../middleware/logger');
 const ah = require('../middleware/asyncHandler');
 
@@ -103,7 +103,10 @@ async function runOcrForMedidor(medidorId, absoluteFotoPath, tipo, lecturaAudito
     const flagCalidad    = result.calidad_foto === 'mala';
     const flagNoMedidor  = result.es_medidor === false;
     const lecturaAuditorNorm = lecturaAuditor ? lecturaAuditor.replace(',', '.') : lecturaAuditor;
-    const flagDiscrep    = !!(result.lectura && lecturaAuditorNorm && result.lectura !== lecturaAuditorNorm);
+    // Discrepancia: solo cuando los dígitos realmente difieren.
+    // Ignora separador decimal y diferencias en cantidad de decimales capturados.
+    // "0082.405" y "0082,4" son el mismo medidor → no es discrepancia.
+    const flagDiscrep    = !!(result.lectura && lecturaAuditorNorm && !coincidenciaDigitos(result.lectura, lecturaAuditorNorm));
     const flagSinLectura = !result.lectura && !lecturaAuditor && !flagAcceso;
     // Baja confianza solo es hallazgo si además no coincide con el auditor
     const flagConfianza  = result.confianza === 'baja' && flagDiscrep;
