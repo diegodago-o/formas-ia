@@ -743,13 +743,19 @@ function coincidenciaDigitos(l1, l2) {
 async function leerConTesseract(imagePath) {
   const tmpPath = path.join(os.tmpdir(), `tess_${Date.now()}.png`);
   try {
-    // Preprocesar para maximizar contraste de dígitos:
-    // escala de grises → normalizar histograma → umbral binario → ampliar
+    // IMPORTANTE — NO usar threshold(128) ni whitelist de solo dígitos:
+    // Esa combinación convierte toda la imagen a blanco/negro y fuerza a
+    // Tesseract a interpretar CADA mancha como un dígito, produciendo
+    // secuencias de 50+ caracteres de ruido puro.
+    //
+    // Sin whitelist Tesseract usa su modelo LSTM completo y distingue
+    // texto real de fondo; luego filtramos solo las secuencias numéricas.
+    // PSM 11 (sparse text) busca texto disperso en toda la imagen, ideal
+    // cuando no sabemos dónde está la ventanilla del medidor.
     await sharp(imagePath)
       .greyscale()
       .normalize()
       .sharpen({ sigma: 1.5 })
-      .threshold(128)
       .resize(1600, null, { fit: 'inside', withoutEnlargement: false })
       .png()
       .toFile(tmpPath);
@@ -757,18 +763,22 @@ async function leerConTesseract(imagePath) {
     const text = await Tesseract.recognize(tmpPath, {
       lang: 'eng',
       oem: '1',   // LSTM
-      psm: '6',   // bloque de texto uniforme
-      tessedit_char_whitelist: '0123456789', // solo dígitos, sin punto ni coma
+      psm: '11',  // sparse text — busca texto disperso en toda la imagen
+      // Sin tessedit_char_whitelist: el modelo LSTM trabaja mejor sin
+      // la restricción que lo fuerza a convertir cualquier mancha en dígito
     });
 
     if (!text?.trim()) return null;
 
-    // Extraer todas las secuencias de dígitos y quedarse con la más larga (≥4)
-    const secuencias = text.replace(/\s+/g, '').match(/\d+/g);
-    if (!secuencias) return null;
-    const candidatos = secuencias.filter(s => s.length >= 4);
-    if (!candidatos.length) return null;
-    return candidatos.reduce((a, b) => a.length >= b.length ? a : b);
+    // Filtrar a secuencias de longitud razonable para medidores (4–12 dígitos)
+    // Descarta: ruido < 4, números de serie imposiblemente largos > 12
+    const secuencias = (text.match(/\d+/g) || [])
+      .filter(s => s.length >= 4 && s.length <= 12);
+
+    if (!secuencias.length) return null;
+
+    // De todos los candidatos razonables, devolver el más largo
+    return secuencias.reduce((a, b) => a.length >= b.length ? a : b);
   } catch {
     return null; // Tesseract no disponible o falla → no bloquea el flujo principal
   } finally {
