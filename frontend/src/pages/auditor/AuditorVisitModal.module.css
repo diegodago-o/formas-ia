@@ -20,6 +20,18 @@
   overflow: hidden;
 }
 
+/* En escritorio: centrar el modal verticalmente */
+@media (min-width: 600px) {
+  .overlay {
+    align-items: center;
+    padding: 20px;
+  }
+  .modal {
+    border-radius: var(--radius);
+    max-height: 88vh;
+  }
+}
+
 .header {
   display: flex;
   align-items: center;
