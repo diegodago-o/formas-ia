@@ -12,7 +12,7 @@
  * Al cambiar CACHE_VERSION se limpian los caches viejos en activate.
  */
 
-const CACHE_VERSION  = 'v3';
+const CACHE_VERSION  = 'v4';
 const SHELL_CACHE    = `lectura-ia-shell-${CACHE_VERSION}`;
 const STATIC_CACHE   = `lectura-ia-static-${CACHE_VERSION}`;
 const RUNTIME_CACHE  = `lectura-ia-runtime-${CACHE_VERSION}`;
