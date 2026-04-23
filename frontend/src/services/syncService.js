@@ -14,7 +14,10 @@
  */
 
 import api from './api';
-import { getPendingVisits, updatePendingVisit, deletePendingVisit } from './localDB';
+import {
+  getPendingVisits, updatePendingVisit, deletePendingVisit,
+  getPendingSubsanaciones, updatePendingSubsanacion, deletePendingSubsanacion,
+} from './localDB';
 
 let syncing = false;
 
@@ -122,11 +125,87 @@ export async function syncPendingVisits(onProgress) {
 }
 
 /**
+ * Sincronizar subsanaciones guardadas offline.
+ * Para cada una: sube las fotos locales y llama al endpoint /subsanar.
+ */
+let syncingSubs = false;
+
+export async function syncPendingSubsanaciones(onProgress) {
+  if (syncingSubs || !navigator.onLine) return;
+  syncingSubs = true;
+
+  try {
+    const pending = await getPendingSubsanaciones();
+    const toSync  = pending.filter(s => s.status !== 'syncing');
+
+    for (const sub of toSync) {
+      try {
+        await updatePendingSubsanacion(sub.localId, { status: 'syncing' });
+        onProgress?.({ type: 'start', localId: sub.localId });
+
+        const medidoresPayload = {};
+
+        for (const [medidorId, datos] of Object.entries(sub.medidores || {})) {
+          let foto_path = datos.foto_path || null;
+
+          // Foto guardada offline → subir ahora
+          if (!foto_path && (datos.foto_file || datos.foto_base64)) {
+            try {
+              const formData = new FormData();
+              if (datos.foto_base64) {
+                const res  = await fetch(datos.foto_base64);
+                const blob = await res.blob();
+                if (blob.size === 0) throw new Error('blob vacío');
+                formData.append('foto', blob, `med_${Date.now()}.jpg`);
+              } else {
+                formData.append('foto', datos.foto_file, `med_${Date.now()}.jpg`);
+              }
+              const { data: up } = await api.post('/visits/upload-photo', formData, {
+                headers: { 'Content-Type': 'multipart/form-data' },
+              });
+              foto_path = up.foto_path;
+            } catch (photoErr) {
+              console.warn(`[sync-sub] No se pudo subir foto medidor ${medidorId}:`, photoErr.message);
+            }
+          }
+
+          if (foto_path || datos.lectura?.trim()) {
+            medidoresPayload[medidorId] = {
+              foto_path: foto_path || null,
+              lectura:   datos.lectura?.trim() || null,
+            };
+          }
+        }
+
+        if (Object.keys(medidoresPayload).length > 0) {
+          await api.post(`/visits/${sub.visitId}/subsanar`, { medidores: medidoresPayload });
+        }
+
+        await deletePendingSubsanacion(sub.localId);
+        onProgress?.({ type: 'done', localId: sub.localId });
+
+      } catch (err) {
+        await updatePendingSubsanacion(sub.localId, {
+          status:    'error',
+          syncError: err.response?.data?.error || err.message,
+        });
+        onProgress?.({ type: 'error', localId: sub.localId, error: err.message });
+      }
+    }
+  } finally {
+    syncingSubs = false;
+  }
+}
+
+/**
  * Registrar listener: sincronizar automáticamente al recuperar conexión.
  * Llamar una vez al arrancar la app.
  */
 export function registerSyncListener(onProgress) {
   window.addEventListener('online', () => {
-    setTimeout(() => syncPendingVisits(onProgress), 1500);
+    setTimeout(() => {
+      syncPendingVisits(onProgress);
+      syncPendingSubsanaciones(onProgress);
+    }, 1500);
   });
 }

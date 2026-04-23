@@ -427,3 +427,27 @@
   transition: opacity 0.15s;
 }
 .btnSubsanarOk:hover { opacity: 0.88; }
+
+/* ── Error de carga ──────────────────────────────────────────── */
+.loadErrorBox {
+  background: #FEF2F2;
+  color: #991B1B;
+  border: 1.5px solid #FCA5A5;
+  border-radius: 10px;
+  padding: 16px;
+  font-size: 0.88rem;
+  line-height: 1.5;
+  text-align: center;
+}
+
+/* ── Banner offline en modo subsanar ─────────────────────────── */
+.offlineBanner {
+  background: #FFFBEB;
+  color: #78350F;
+  border: 1.5px solid #FDE68A;
+  border-radius: 10px;
+  padding: 12px 14px;
+  font-size: 0.83rem;
+  font-weight: 600;
+  line-height: 1.4;
+}
