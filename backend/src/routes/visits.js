@@ -103,17 +103,25 @@ async function runOcrForMedidor(medidorId, absoluteFotoPath, tipo, lecturaAudito
     const flagCalidad    = result.calidad_foto === 'mala';
     const flagNoMedidor  = result.es_medidor === false;
     const lecturaAuditorNorm = lecturaAuditor ? lecturaAuditor.replace(',', '.') : lecturaAuditor;
-    // Discrepancia: solo cuando los dígitos realmente difieren.
-    // Ignora separador decimal y diferencias en cantidad de decimales capturados.
-    // "0082.405" y "0082,4" son el mismo medidor → no es discrepancia.
-    const flagDiscrep    = !!(result.lectura && lecturaAuditorNorm && !coincidenciaDigitos(result.lectura, lecturaAuditorNorm));
+    // Discrepancia REAL: dígitos difieren Y la IA tiene ALTA confianza en su lectura.
+    //
+    // Con confianza='baja' el OCR mismo es incierto → el auditor que vio
+    // físicamente el medidor tiene mayor autoridad → NO generar alerta.
+    // Con confianza='alta': IA segura + dígitos distintos → revisar.
+    //
+    // Además se ignora el separador decimal (. vs ,) y diferencias en
+    // cantidad de decimales: "0082.405" y "0082,4" son el mismo medidor.
+    const flagDiscrep    = !!(
+      result.lectura &&
+      lecturaAuditorNorm &&
+      !coincidenciaDigitos(result.lectura, lecturaAuditorNorm) &&
+      result.confianza === 'alta'
+    );
     const flagSinLectura = !result.lectura && !lecturaAuditor && !flagAcceso;
-    // Baja confianza solo es hallazgo si además no coincide con el auditor
-    const flagConfianza  = result.confianza === 'baja' && flagDiscrep;
 
     const requiereRevision = (
       flagDelta || flagAcceso || flagCalidad || flagNoMedidor ||
-      flagDiscrep || flagSinLectura || flagConfianza
+      flagDiscrep || flagSinLectura
     ) ? 1 : 0;
 
     await pool.query(
