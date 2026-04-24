@@ -49,6 +49,7 @@ export default function AdminAlerts() {
   const [openVisits, setOpenVisits]   = useState(new Set());
   const [exitingIds, setExitingIds]   = useState(new Set()); // medidor_ids saliendo con animación
   const [notification, setNotification] = useState(null);   // { mensaje, tipo: 'aprobada'|'rechazada' }
+  const [search, setSearch]           = useState('');
 
   // true solo durante la carga inicial; las recargas post-acción no muestran spinner
   // ni resetean los acordeones abiertos
@@ -131,6 +132,20 @@ export default function AdminAlerts() {
     return Object.values(map).sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
   }, [alerts]);
 
+  // Filtrar por búsqueda
+  const gruposFiltrados = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return grupos;
+    return grupos.filter(g =>
+      String(g.visita_id).includes(q) ||
+      g.apartamento?.toLowerCase().includes(q) ||
+      g.torre?.toLowerCase().includes(q) ||
+      g.conjunto?.toLowerCase().includes(q) ||
+      g.ciudad?.toLowerCase().includes(q) ||
+      g.auditor?.toLowerCase().includes(q)
+    );
+  }, [grupos, search]);
+
   if (loading) return (
     <div className={styles.loadingWrap}>
       <div className={styles.spinner} />
@@ -175,9 +190,33 @@ export default function AdminAlerts() {
         </div>
       </div>
 
+      {/* Buscador */}
+      <div className={styles.searchBar}>
+        <span className={styles.searchIcon}>🔍</span>
+        <input
+          type="search"
+          className={styles.searchInput}
+          placeholder="Buscar por apto, conjunto, auditor, ciudad o #visita…"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+        />
+        {search && (
+          <button className={styles.searchClear} onClick={() => setSearch('')} title="Limpiar">✕</button>
+        )}
+      </div>
+
+      {/* Conteo cuando hay filtro activo */}
+      {search && (
+        <p className={styles.searchCount}>
+          {gruposFiltrados.length === 0
+            ? `Sin resultados para "${search}"`
+            : `${gruposFiltrados.length} visita${gruposFiltrados.length !== 1 ? 's' : ''} encontrada${gruposFiltrados.length !== 1 ? 's' : ''}`}
+        </p>
+      )}
+
       {/* Lista acordeón por visita */}
       <div className={styles.list}>
-        {grupos.map(grupo => {
+        {gruposFiltrados.map(grupo => {
           const isOpen  = openVisits.has(grupo.visita_id);
           const sevCls  = severidadVisita(grupo.alertas);
 
