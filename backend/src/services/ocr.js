@@ -87,19 +87,17 @@ async function preprocessImage(inputPath) {
 
 // ─────────────────────────────────────────────────────────────
 // Cola de concurrencia — evita saturar el límite de tokens/minuto
-// Configurable: OCR_MAX_CONCURRENT (default 2)
-// Con 30 000 TPM y ~2 600 tokens/imagen → máx ~11 imágenes/min
-// Limitar a 2 concurrentes + retry hace que las colas drenen solas
+// Configurable: OCR_MAX_CONCURRENT (default 1)
+// Con 30 000 TPM y ~2 600 tokens/imagen (1 pasada) → máx ~11 imágenes/min
 // ─────────────────────────────────────────────────────────────
 // Límite de concurrencia — 1 por defecto para no superar 30 000 TPM.
-// Con ~2 600 tokens/imagen y 6 s de pausa = ~6 imágenes/min = ~15 600 TPM → margen seguro.
+// Con 1 pasada (~2 600 tokens/imagen) y 4 s de pausa ≈ 7,5 imágenes/min ≈ 19 500 TPM → margen seguro.
 // Si el plan de OpenAI tiene más TPM, aumentar OCR_MAX_CONCURRENT en .env.
 const OCR_MAX_CONCURRENT = parseInt(process.env.OCR_MAX_CONCURRENT || '1', 10);
 // Pausa mínima DESPUÉS de cada llamada antes de liberar el slot.
-// Evita que la cola vacíe el límite TPM en ráfagas cortas.
-// Fórmula: OCR_MIN_DELAY_MS = 60000 / (TPM_LIMIT / TOKENS_POR_IMAGEN / MAX_CONCURRENT)
-// Ejemplo 30 000 TPM / 2 600 / 1 ≈ 11,5 llamadas/min → 5 200 ms. Usamos 6 000 por margen.
-const OCR_MIN_DELAY_MS = parseInt(process.env.OCR_MIN_DELAY_MS || '6000', 10);
+// Con 1 pasada única: API ~4 s + 4 s pausa = 8 s/imagen → 7,5 imágenes/min → ~19 500 TPM.
+// (Antes con 2 pasadas se necesitaban 6 s; ahora 4 s son suficientes con margen.)
+const OCR_MIN_DELAY_MS = parseInt(process.env.OCR_MIN_DELAY_MS || '4000', 10);
 let _ocrActive = 0;
 const _ocrQueue = [];
 
@@ -557,9 +555,11 @@ Responde SOLO con este JSON (sin texto previo ni posterior):
 };
 
 // ─────────────────────────────────────────────────────────────
-// PROMPTS — Segunda pasada: verificación independiente (distinto ángulo)
+// PROMPTS_VERIFICACION eliminado — ya no se usa segunda pasada GPT-4o.
+// La confianza se eleva solo cuando Tesseract (local, sin costo) confirma
+// la lectura de la primera (y única) pasada.
 // ─────────────────────────────────────────────────────────────
-const PROMPTS_VERIFICACION = {
+const PROMPTS_VERIFICACION = { // mantenido por compatibilidad pero no se llama
 
   gas: `Analiza esta imagen de un medidor de gas domiciliario colombiano.
 
@@ -834,10 +834,11 @@ async function analizarMedidor(imagePath, tipo, { modo = 'rapido' } = {}) {
   const prompt    = PROMPTS_COT[tipo] || PROMPTS_COT.luz;
 
   try {
-    // ── GPT-4o (1ª pasada) y Tesseract corren en PARALELO ─────────────
-    // Tesseract es local y no consume TPM — no cuesta nada correrlo siempre.
-    // Si ambos coinciden en la secuencia de dígitos → alta confianza
-    // y se omite la 2ª pasada GPT-4o (ahorra ~50% de tokens en fotos claras).
+    // ── GPT-4o + Tesseract corren en PARALELO ─────────────────────────
+    // Tesseract es local (sin costo de tokens). Si confirma la lectura de
+    // GPT-4o → sube la confianza a 'alta'. En todos los demás casos se
+    // devuelve directamente el resultado de GPT-4o sin segunda pasada.
+    // Una sola llamada a la IA por imagen mantiene el consumo bajo 30 000 TPM.
     const [gptSettled, tessSettled] = await Promise.allSettled([
       llamarModeloConRetry(workingBuffer, mediaType, prompt).then(j => parsearResultado(j)),
       leerConTesseract(processedPath || imagePath),
@@ -850,9 +851,9 @@ async function analizarMedidor(imagePath, tipo, { modo = 'rapido' } = {}) {
 
     logger.info(`OCR Tesseract="${tesseractLectura || 'null'}" GPT-4o="${result1.lectura || 'null'}" — ${path.basename(imagePath)}`);
 
-    // ── Tesseract confirma GPT-4o → alta confianza, sin 2ª pasada ─────
+    // Tesseract confirma GPT-4o → subir confianza a 'alta'
     if (result1.lectura && tesseractLectura && coincidenciaDigitos(result1.lectura, tesseractLectura)) {
-      logger.info(`OCR Tess+GPT coinciden → alta confianza (sin 2ª pasada)`);
+      logger.info(`OCR Tess+GPT coinciden → alta confianza`);
       return {
         ...result1,
         confianza:         'alta',
@@ -861,54 +862,7 @@ async function analizarMedidor(imagePath, tipo, { modo = 'rapido' } = {}) {
       };
     }
 
-    // ── Sin confirmación Tesseract → 2ª pasada GPT-4o si es incierto ──
-    const necesitaVerificacion = result1.confianza === 'baja'
-      || result1.calidad_foto !== 'buena'
-      || result1.es_medidor === false
-      || result1.lectura === null;
-
-    if (necesitaVerificacion) {
-      try {
-        const prompt2  = PROMPTS_VERIFICACION[tipo] || PROMPTS_VERIFICACION.luz;
-        const json2    = await llamarModeloConRetry(workingBuffer, mediaType, prompt2);
-        const result2  = parsearResultado(json2);
-
-        // Primera dijo no-medidor pero la segunda sí → confiar en la segunda
-        if (result1.es_medidor === false && result2.es_medidor !== false) {
-          return { ...result2, nota: `[Verificado medidor] ${result2.nota}` };
-        }
-
-        if (result1.lectura && result2.lectura) {
-          // Coinciden en dígitos (ignora separador) → consenso confirmado
-          if (coincidenciaDigitos(result1.lectura, result2.lectura)) {
-            return {
-              ...result1,
-              confianza:         'alta',
-              requiere_revision: result1.calidad_foto === 'mala' || !result1.es_medidor,
-              nota:              `[Verificado 2ª] ${result1.nota}`,
-            };
-          } else {
-            if (result1.confianza === 'alta') {
-              return { ...result1, nota: `[Confirmado 1ª pasada] ${result1.nota}` };
-            }
-            return {
-              ...result1,
-              confianza:         'baja',
-              requiere_revision: true,
-              nota:              `[Ambiguo] Pasada 1: ${result1.lectura} · Pasada 2: ${result2.lectura}. Verifica la foto.`,
-            };
-          }
-        }
-
-        // Primera no leyó, segunda sí → usar segunda
-        if (!result1.lectura && result2.lectura) {
-          return { ...result2, nota: `[Recuperado en 2ª pasada] ${result2.nota}` };
-        }
-      } catch (err2) {
-        logger.warn(`OCR segunda pasada falló: ${err2.message}`);
-      }
-    }
-
+    // Sin confirmación → devolver resultado de pasada única
     return result1;
 
   } catch (err) {
