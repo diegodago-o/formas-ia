@@ -99,6 +99,20 @@
 }
 .btnVer:hover { opacity: 0.85; }
 
+.actionsCell { display: flex; gap: 6px; align-items: center; }
+
+.btnDelete {
+  background: #FEE2E2;
+  color: #991B1B;
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 5px 10px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.btnDelete:hover { background: #FECACA; }
+
 .badge {
   background: #FEF3C7;
   color: #92400E;

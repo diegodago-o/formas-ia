@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import api from '../../services/api';
+import { useAuth } from '../../context/AuthContext';
 import VisitModal from './VisitModal';
 import styles from './AdminVisits.module.css';
 
@@ -10,7 +11,11 @@ const ESTADO_STYLE = {
   anulada:   { bg: '#F3F4F6', color: '#6B7280' },
 };
 
+const SUPERADMIN_EMAIL = 'admin@formas-ia.com';
+
 export default function AdminVisits() {
+  const { user }                    = useAuth();
+  const isSuperAdmin                = user?.email?.toLowerCase() === SUPERADMIN_EMAIL;
   const [data, setData]             = useState({ data: [], total: 0 });
   const [page, setPage]             = useState(1);
   const [filters, setFilters]       = useState({ desde: '', hasta: '', estado: '', requiere_revision: '' });
@@ -40,6 +45,16 @@ export default function AdminVisits() {
     setSort(newSort);
     setPage(1);
     load(1, filters, newSort);
+  };
+
+  const handleDelete = async (id, apartamento) => {
+    if (!window.confirm(`¿Eliminar permanentemente la visita #${id} (Apto ${apartamento})?\nEsta acción no se puede deshacer.`)) return;
+    try {
+      await api.delete(`/admin/visits/${id}`);
+      load();
+    } catch (e) {
+      alert(e.response?.data?.error || 'Error al eliminar la visita');
+    }
   };
 
   const downloadExcel = async () => {
@@ -137,10 +152,19 @@ export default function AdminVisits() {
                           ? <span className={styles.badge}>{v.alertas_ocr} ⚠️</span>
                           : <span className={styles.ok}>✓</span>}
                       </td>
-                      <td>
+                      <td className={styles.actionsCell}>
                         <button className={styles.btnVer} onClick={() => setSelectedId(v.id)}>
                           👁 Ver
                         </button>
+                        {isSuperAdmin && (
+                          <button
+                            className={styles.btnDelete}
+                            onClick={() => handleDelete(v.id, v.apartamento)}
+                            title="Eliminar visita permanentemente"
+                          >
+                            🗑
+                          </button>
+                        )}
                       </td>
                     </tr>
                   );

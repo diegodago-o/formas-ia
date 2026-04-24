@@ -1,10 +1,16 @@
 const router = require('express').Router();
+const fs     = require('fs');
+const path   = require('path');
 const bcrypt = require('bcryptjs');
 const { pool } = require('../models/db');
 const { authMiddleware, requireRole } = require('../middleware/auth');
 const ah = require('../middleware/asyncHandler');
 
 const isAdmin = [authMiddleware, requireRole('admin')];
+
+// Email con permiso exclusivo para eliminar visitas.
+// Configurable vía variable de entorno SUPERADMIN_EMAIL.
+const SUPERADMIN_EMAIL = (process.env.SUPERADMIN_EMAIL || 'admin@formas-ia.com').toLowerCase();
 
 // GET /api/admin/stats  — métricas para el dashboard
 router.get('/stats', ...isAdmin, ah(async (req, res) => {
@@ -317,6 +323,36 @@ router.patch('/users/:id', ...isAdmin, ah(async (req, res) => {
       [nombre ?? null, activo ?? null, req.params.id]
     );
   }
+
+  res.json({ ok: true });
+}));
+
+// DELETE /api/admin/visits/:id — eliminación permanente
+// Restringido al superadmin (SUPERADMIN_EMAIL). Cualquier otro admin recibe 403.
+router.delete('/visits/:id', ...isAdmin, ah(async (req, res) => {
+  if (req.user.email.toLowerCase() !== SUPERADMIN_EMAIL) {
+    return res.status(403).json({ error: 'Solo el superadministrador puede eliminar visitas' });
+  }
+
+  const [[visita]] = await pool.query('SELECT id FROM visitas WHERE id = ?', [req.params.id]);
+  if (!visita) return res.status(404).json({ error: 'Visita no encontrada' });
+
+  // Obtener fotos antes de borrar para limpiar el filesystem
+  const [medidores] = await pool.query(
+    'SELECT foto_path FROM medidores WHERE visita_id = ?', [req.params.id]
+  );
+
+  // Borrar registros (medidores primero por FK, luego visita)
+  await pool.query('DELETE FROM medidores WHERE visita_id = ?', [req.params.id]);
+  await pool.query('DELETE FROM visitas  WHERE id = ?',         [req.params.id]);
+
+  // Limpiar fotos del filesystem (en background, sin bloquear la respuesta)
+  const uploadsDir = path.join(__dirname, '..', '..', process.env.UPLOADS_DIR || 'uploads');
+  medidores.forEach(m => {
+    if (m.foto_path) {
+      fs.unlink(path.join(uploadsDir, m.foto_path), () => {});
+    }
+  });
 
   res.json({ ok: true });
 }));
