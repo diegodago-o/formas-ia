@@ -184,6 +184,22 @@ router.patch('/visits/:id/estado', ...isAdmin, ah(async (req, res) => {
     `UPDATE visitas SET estado = ?, motivo_rechazo = ?, revisado_por = ?, revisado_en = NOW() WHERE id = ?`,
     [estado, motivo_rechazo || null, req.user.id, req.params.id]
   );
+
+  // Al aprobar o rechazar manualmente, resolver todos los medidores que aún
+  // tengan requiere_revision=1 para que no persistan en la cola de Alertas OCR.
+  // Esto cubre casos como "sin_acceso" en edificios sin servicio de gas donde
+  // el admin cierra la visita directamente sin pasar por Alertas OCR.
+  const medEstado = estado === 'aprobada' ? 'aprobado' : 'rechazado';
+  await pool.query(
+    `UPDATE medidores
+     SET requiere_revision   = 0,
+         estado_revision_ocr = ?,
+         revisado_por        = ?,
+         revisado_en         = NOW()
+     WHERE visita_id = ? AND requiere_revision = 1`,
+    [medEstado, req.user.id, req.params.id]
+  );
+
   res.json({ ok: true });
 }));
 
