@@ -129,9 +129,12 @@ export default function NewVisit() {
 
   useEffect(() => { loadCatalogos(); }, [loadCatalogos]);
 
-  // Filtrar conjuntos y torres
+  // Filtrar conjuntos y torres — SOLO actualiza la lista del dropdown,
+  // NO resetea el ID seleccionado. Los resets se hacen únicamente en los
+  // onChange handlers para evitar borrar los IDs del borrador cuando los
+  // catálogos cargan asincrónicamente en paralelo con la carga del draft.
   useEffect(() => {
-    if (!ciudadId) { setConjuntos([]); setConjuntoId(''); return; }
+    if (!ciudadId) { setConjuntos([]); return; }
     if (online) {
       api.get(`/catalogs/conjuntos?ciudad_id=${ciudadId}`)
         .then(r => setConjuntos(r.data))
@@ -142,7 +145,7 @@ export default function NewVisit() {
   }, [ciudadId, online, allConjuntos]); // eslint-disable-line
 
   useEffect(() => {
-    if (!conjuntoId) { setTorres([]); setTorreId(''); return; }
+    if (!conjuntoId) { setTorres([]); return; }
     if (online) {
       api.get(`/catalogs/torres?conjunto_id=${conjuntoId}`)
         .then(r => setTorres(r.data))
@@ -151,6 +154,17 @@ export default function NewVisit() {
       setTorres(allTorres.filter(t => String(t.conjunto_id) === String(conjuntoId)));
     }
   }, [conjuntoId, online, allTorres]); // eslint-disable-line
+
+  // Handlers de selección manual — resetean dependientes explícitamente
+  const handleCiudadChange = (value) => {
+    setCiudadId(value);
+    setConjuntoId('');
+    setTorreId('');
+  };
+  const handleConjuntoChange = (value) => {
+    setConjuntoId(value);
+    setTorreId('');
+  };
 
   // ── Cargar borrador (si viene con ?draft=id) ───────────────────────
   useEffect(() => {
@@ -411,6 +425,13 @@ export default function NewVisit() {
     setSubmitting(true);
     setError('');
 
+    // Guardia pre-envío: evita llamar al backend con datos incompletos
+    if (!ciudadId || !conjuntoId || !apartamento.trim()) {
+      setError('Faltan datos de ubicación (ciudad o conjunto). Presiona "Editar ubicación" en el banner para corregirlos.');
+      setSubmitting(false);
+      return;
+    }
+
     const medidoresPayload = ['luz', 'agua', 'gas'].reduce((acc, tipo) => {
       const m = medidores[tipo];
       if (m.foto_path || m.lectura || m.sin_acceso || m.foto_file || m.foto_base64) {
@@ -608,6 +629,19 @@ export default function NewVisit() {
         </div>
       )}
 
+      {/* Aviso de recuperación: borrador con datos de ubicación incompletos */}
+      {locationLocked && (!conjuntoId || !ciudadId) && (
+        <div className={styles.ubicacionIncompleta}>
+          <span>⚠️ Este borrador perdió datos de ubicación (ciudad o conjunto). Debes corregirlos antes de guardar.</span>
+          <button
+            className={styles.btnEditarUbicacion}
+            onClick={() => { setLocationLocked(false); setStep(0); }}
+          >
+            ✏️ Editar ubicación
+          </button>
+        </div>
+      )}
+
       {/* ── PASO 0: Ubicación ─────────────────────────────────────── */}
       {step === 0 && (
         <div className={styles.section}>
@@ -642,7 +676,7 @@ export default function NewVisit() {
 
           <div className={styles.field}>
             <label>Ciudad *</label>
-            <select value={ciudadId} onChange={e => setCiudadId(e.target.value)}>
+            <select value={ciudadId} onChange={e => handleCiudadChange(e.target.value)}>
               <option value="">Seleccionar ciudad</option>
               {ciudades.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
             </select>
@@ -650,7 +684,7 @@ export default function NewVisit() {
 
           <div className={styles.field}>
             <label>Conjunto *</label>
-            <select value={conjuntoId} onChange={e => setConjuntoId(e.target.value)} disabled={!ciudadId}>
+            <select value={conjuntoId} onChange={e => handleConjuntoChange(e.target.value)} disabled={!ciudadId}>
               <option value="">Seleccionar conjunto</option>
               {conjuntos.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
             </select>
