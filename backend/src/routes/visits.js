@@ -88,6 +88,16 @@ async function checkAutoCloseVisita(visita_id, userId) {
 
 async function runOcrForMedidor(medidorId, absoluteFotoPath, tipo, lecturaAuditor, auditorId = null) {
   try {
+    // ── Caché: si ya tiene resultado OCR no reprocesar la misma foto ──
+    const [[medCache]] = await pool.query(
+      'SELECT confianza_ocr FROM medidores WHERE id = ?',
+      [medidorId]
+    );
+    if (medCache?.confianza_ocr) {
+      logger.info(`OCR cache hit medidor ${medidorId} (confianza=${medCache.confianza_ocr}) — skip`);
+      return;
+    }
+
     const result = await analizarMedidor(absoluteFotoPath, tipo, { modo: 'preciso' });
 
     const [rows] = await pool.query(
