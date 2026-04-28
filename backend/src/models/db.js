@@ -11,7 +11,14 @@ const pool = mysql.createPool({
   connectionLimit: 10,
   queueLimit: 0,
   charset: 'utf8mb4',
-  timezone: '-05:00', // Colombia
+  timezone: '-05:00', // Colombia — cómo mysql2 interpreta los datetimes
+});
+
+// Forzar zona horaria de sesión en cada conexión nueva del pool.
+// Esto asegura que NOW(), CURRENT_TIMESTAMP y todas las funciones de fecha
+// usen hora Colombia (UTC-5) independientemente del timezone del servidor MySQL.
+pool.on('connection', function (connection) {
+  connection.query("SET time_zone = '-05:00'");
 });
 
 async function testConnection() {
