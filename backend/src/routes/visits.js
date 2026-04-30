@@ -4,6 +4,7 @@ const { pool } = require('../models/db');
 const { authMiddleware } = require('../middleware/auth');
 const upload = require('../middleware/upload');
 const { analizarMedidor, coincidenciaDigitos } = require('../services/ocr');
+const { leerHoraFoto } = require('../services/exif');
 const logger = require('../middleware/logger');
 const ah = require('../middleware/asyncHandler');
 
@@ -246,17 +247,24 @@ router.post('/', authMiddleware, ah(async (req, res) => {
 
       const requiereRevision = (flagDelta || flagAcceso || flagFoto || flagManual) ? 1 : 0;
 
+      // Extraer hora de captura del EXIF antes de insertar
+      let horaFoto = null;
+      if (foto_path) {
+        const uploadsDir = path.join(__dirname, '../../', process.env.UPLOADS_DIR || 'uploads');
+        horaFoto = await leerHoraFoto(path.join(uploadsDir, foto_path));
+      }
+
       const [insertResult] = await conn.query(
         `INSERT INTO medidores
-          (visita_id, tipo, foto_path,
+          (visita_id, tipo, foto_path, hora_foto,
            lectura_ocr, confianza_ocr, calidad_foto, motivo_calidad, nota_ocr,
            lectura_confirmada, requiere_revision,
            sin_acceso, motivo_sin_acceso,
            es_medidor,
            lectura_anterior, delta, primera_lectura)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
-          visitaId, tipo, foto_path || null,
+          visitaId, tipo, foto_path || null, horaFoto,
           null, null, 'buena', null, null,
           lectura || null, requiereRevision,
           sin_acceso ? 1 : 0, motivo_sin_acceso || null,
@@ -362,10 +370,14 @@ router.post('/:id/subsanar', authMiddleware, ah(async (req, res) => {
     const lectura = datos.lectura ? datos.lectura.replace(',', '.') : null;
 
     if (datos.foto_path) {
-      // Nueva foto → reset completo + OCR pendiente
+      // Nueva foto → reset completo + OCR pendiente + EXIF
+      const uploadsDir2 = path.join(__dirname, '../../', process.env.UPLOADS_DIR || 'uploads');
+      const horaFotoSub = await leerHoraFoto(path.join(uploadsDir2, datos.foto_path));
+
       await pool.query(
         `UPDATE medidores SET
            foto_path           = ?,
+           hora_foto           = ?,
            lectura_confirmada  = COALESCE(?, lectura_confirmada),
            lectura_ocr         = NULL,
            confianza_ocr       = NULL,
@@ -378,7 +390,7 @@ router.post('/:id/subsanar', authMiddleware, ah(async (req, res) => {
            revisado_por        = NULL,
            revisado_en         = NULL
          WHERE id = ?`,
-        [datos.foto_path, lectura, med.id]
+        [datos.foto_path, horaFotoSub, lectura, med.id]
       );
       ocrQueue.push({ medidorId: med.id, foto_path: datos.foto_path, tipo: med.tipo, lectura });
     } else if (lectura) {

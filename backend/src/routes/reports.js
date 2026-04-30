@@ -28,6 +28,10 @@ const fmtHora = (d) => d
   ? new Date(d).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })
   : '';
 
+const fmtFechaCorta = (d) => d
+  ? new Date(d).toLocaleDateString('es-CO', { year: 'numeric', month: '2-digit', day: '2-digit' })
+  : '';
+
 const capFirst = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : '');
 
 function fmtDelta(delta, primeraLectura) {
@@ -40,33 +44,34 @@ function fmtDelta(delta, primeraLectura) {
 
 // ── Diseño de secciones ───────────────────────────────────────
 // Cada sección: [etiqueta, col_desde, col_hasta, argb_fila1, argb_fila2]
+// Cada medidor tiene 10 columnas (+ 2 de fecha/hora foto respecto a antes)
 const SECCIONES = [
   ['IDENTIFICACIÓN DE LA VISITA',       1,  12, 'FF1E3A5F', 'FF2D5080'],
-  ['MEDIDOR DE ELECTRICIDAD (kWh)',     13,  20, 'FF78350F', 'FF92400E'],
-  ['MEDIDOR DE AGUA (m³)',              21,  28, 'FF1E3A8A', 'FF1D4ED8'],
-  ['MEDIDOR DE GAS (m³)',               29,  36, 'FF7F1D1D', 'FF991B1B'],
-  ['REVISIÓN Y ESTADO',                 37,  40, 'FF1F2937', 'FF374151'],
+  ['MEDIDOR DE ELECTRICIDAD (kWh)',     13,  22, 'FF78350F', 'FF92400E'],
+  ['MEDIDOR DE AGUA (m³)',              23,  32, 'FF1E3A8A', 'FF1D4ED8'],
+  ['MEDIDOR DE GAS (m³)',               33,  42, 'FF7F1D1D', 'FF991B1B'],
+  ['REVISIÓN Y ESTADO',                 43,  46, 'FF1F2937', 'FF374151'],
 ];
 
 // Índice sección por columna (para fila 2)
 const seccionDeColumna = (col) => SECCIONES.find(([, f, t]) => col >= f && col <= t);
 
-// Encabezados de columna (fila 2) — 40 columnas
+// Encabezados de columna (fila 2) — 46 columnas
 const COL_HEADERS = [
   // IDENTIFICACIÓN (1-12)
   '#', 'Fecha y Hora', 'Hora Inicio', 'Hora Fin', 'Duración',
   'Auditor', 'Ciudad', 'Conjunto', 'Torre', 'Apartamento',
   'Latitud', 'Longitud',
-  // LUZ (13-20)
+  // LUZ (13-22)
   'Lectura kWh', 'Ant. kWh', 'Consumo Δ', 'Lectura OCR',
-  'Confianza IA', 'Sin Acceso', 'Motivo', 'Foto',
-  // AGUA (21-28)
+  'Confianza IA', 'Sin Acceso', 'Motivo', 'Fecha Foto', 'Hora Foto', 'Foto',
+  // AGUA (23-32)
   'Lectura m³', 'Ant. m³', 'Consumo Δ', 'Lectura OCR',
-  'Confianza IA', 'Sin Acceso', 'Motivo', 'Foto',
-  // GAS (29-36)
+  'Confianza IA', 'Sin Acceso', 'Motivo', 'Fecha Foto', 'Hora Foto', 'Foto',
+  // GAS (33-42)
   'Lectura m³', 'Ant. m³', 'Consumo Δ', 'Lectura OCR',
-  'Confianza IA', 'Sin Acceso', 'Motivo', 'Foto',
-  // REVISIÓN (37-40)
+  'Confianza IA', 'Sin Acceso', 'Motivo', 'Fecha Foto', 'Hora Foto', 'Foto',
+  // REVISIÓN (43-46)
   'Estado', 'Alerta OCR', 'Observaciones', 'Mot. Rechazo',
 ];
 
@@ -111,7 +116,7 @@ router.get('/excel', authMiddleware, requireRole('admin'), ah(async (req, res) =
     const ids = visitas.map(v => v.id);
     const [meds] = await pool.query(
       `SELECT visita_id, tipo,
-              foto_path, lectura_confirmada, lectura_ocr, lectura_anterior,
+              foto_path, hora_foto, lectura_confirmada, lectura_ocr, lectura_anterior,
               delta, primera_lectura, confianza_ocr, calidad_foto,
               requiere_revision, sin_acceso, motivo_sin_acceso
        FROM medidores WHERE visita_id IN (?)`,
@@ -136,46 +141,52 @@ router.get('/excel', authMiddleware, requireRole('admin'), ah(async (req, res) =
   // Definir anchos y keys (sin header — lo añadimos manual)
   ws.columns = [
     // IDENTIFICACIÓN
-    { key: 'id',           width: 6  },
-    { key: 'fecha',        width: 19 },
-    { key: 'hora_inicio',  width: 10 },
-    { key: 'hora_fin',     width: 10 },
-    { key: 'duracion',     width: 10 },
-    { key: 'auditor',      width: 20 },
-    { key: 'ciudad',       width: 16 },
-    { key: 'conjunto',     width: 22 },
-    { key: 'torre',        width: 10 },
-    { key: 'apartamento',  width: 12 },
-    { key: 'latitud',      width: 13 },
-    { key: 'longitud',     width: 13 },
-    // LUZ
-    { key: 'lectura_luz',  width: 14 },
-    { key: 'ant_luz',      width: 13 },
-    { key: 'delta_luz',    width: 13 },
-    { key: 'ocr_luz',      width: 13 },
-    { key: 'conf_luz',     width: 12 },
-    { key: 'acc_luz',      width: 10 },
-    { key: 'motivo_luz',   width: 26 },
-    { key: 'foto_luz',     width: 9  },
-    // AGUA
-    { key: 'lectura_agua', width: 14 },
-    { key: 'ant_agua',     width: 13 },
-    { key: 'delta_agua',   width: 13 },
-    { key: 'ocr_agua',     width: 13 },
-    { key: 'conf_agua',    width: 12 },
-    { key: 'acc_agua',     width: 10 },
-    { key: 'motivo_agua',  width: 26 },
-    { key: 'foto_agua',    width: 9  },
-    // GAS
-    { key: 'lectura_gas',  width: 14 },
-    { key: 'ant_gas',      width: 13 },
-    { key: 'delta_gas',    width: 13 },
-    { key: 'ocr_gas',      width: 13 },
-    { key: 'conf_gas',     width: 12 },
-    { key: 'acc_gas',      width: 10 },
-    { key: 'motivo_gas',   width: 26 },
-    { key: 'foto_gas',     width: 9  },
-    // REVISIÓN
+    { key: 'id',              width: 6  },
+    { key: 'fecha',           width: 19 },
+    { key: 'hora_inicio',     width: 10 },
+    { key: 'hora_fin',        width: 10 },
+    { key: 'duracion',        width: 10 },
+    { key: 'auditor',         width: 20 },
+    { key: 'ciudad',          width: 16 },
+    { key: 'conjunto',        width: 22 },
+    { key: 'torre',           width: 10 },
+    { key: 'apartamento',     width: 12 },
+    { key: 'latitud',         width: 13 },
+    { key: 'longitud',        width: 13 },
+    // LUZ (10 cols)
+    { key: 'lectura_luz',     width: 14 },
+    { key: 'ant_luz',         width: 13 },
+    { key: 'delta_luz',       width: 13 },
+    { key: 'ocr_luz',         width: 13 },
+    { key: 'conf_luz',        width: 12 },
+    { key: 'acc_luz',         width: 10 },
+    { key: 'motivo_luz',      width: 26 },
+    { key: 'fecha_foto_luz',  width: 12 },
+    { key: 'hora_foto_luz',   width: 9  },
+    { key: 'foto_luz',        width: 9  },
+    // AGUA (10 cols)
+    { key: 'lectura_agua',    width: 14 },
+    { key: 'ant_agua',        width: 13 },
+    { key: 'delta_agua',      width: 13 },
+    { key: 'ocr_agua',        width: 13 },
+    { key: 'conf_agua',       width: 12 },
+    { key: 'acc_agua',        width: 10 },
+    { key: 'motivo_agua',     width: 26 },
+    { key: 'fecha_foto_agua', width: 12 },
+    { key: 'hora_foto_agua',  width: 9  },
+    { key: 'foto_agua',       width: 9  },
+    // GAS (10 cols)
+    { key: 'lectura_gas',     width: 14 },
+    { key: 'ant_gas',         width: 13 },
+    { key: 'delta_gas',       width: 13 },
+    { key: 'ocr_gas',         width: 13 },
+    { key: 'conf_gas',        width: 12 },
+    { key: 'acc_gas',         width: 10 },
+    { key: 'motivo_gas',      width: 26 },
+    { key: 'fecha_foto_gas',  width: 12 },
+    { key: 'hora_foto_gas',   width: 9  },
+    { key: 'foto_gas',        width: 9  },
+    // REVISIÓN (4 cols)
     { key: 'estado',          width: 12 },
     { key: 'alerta_ocr',      width: 12 },
     { key: 'observaciones',   width: 35 },
@@ -211,7 +222,7 @@ router.get('/excel', authMiddleware, requireRole('admin'), ah(async (req, res) =
     cell.border    = { bottom: { style: 'medium', color: { argb: 'FFE5E7EB' } } };
   });
 
-  ws.autoFilter = { from: { row: 2, column: 1 }, to: { row: 2, column: 40 } };
+  ws.autoFilter = { from: { row: 2, column: 1 }, to: { row: 2, column: 46 } };
 
   // ── FILAS DE DATOS ────────────────────────────────────────
   visitas.forEach((v, i) => {
@@ -239,32 +250,38 @@ router.get('/excel', authMiddleware, requireRole('admin'), ah(async (req, res) =
       latitud:      v.latitud  ?? '',
       longitud:     v.longitud ?? '',
       // LUZ
-      lectura_luz:  med.luz?.lectura_confirmada ?? '',
-      ant_luz:      med.luz?.lectura_anterior   ?? '',
-      delta_luz:    fmtDelta(med.luz?.delta, med.luz?.primera_lectura),
-      ocr_luz:      med.luz?.lectura_ocr        ?? '',
-      conf_luz:     capFirst(med.luz?.confianza_ocr),
-      acc_luz:      med.luz?.sin_acceso  ? 'Sí' : '',
-      motivo_luz:   med.luz?.motivo_sin_acceso  ?? '',
-      foto_luz:     fotoVal('luz'),
+      lectura_luz:     med.luz?.lectura_confirmada ?? '',
+      ant_luz:         med.luz?.lectura_anterior   ?? '',
+      delta_luz:       fmtDelta(med.luz?.delta, med.luz?.primera_lectura),
+      ocr_luz:         med.luz?.lectura_ocr        ?? '',
+      conf_luz:        capFirst(med.luz?.confianza_ocr),
+      acc_luz:         med.luz?.sin_acceso  ? 'Sí' : '',
+      motivo_luz:      med.luz?.motivo_sin_acceso  ?? '',
+      fecha_foto_luz:  fmtFechaCorta(med.luz?.hora_foto),
+      hora_foto_luz:   fmtHora(med.luz?.hora_foto),
+      foto_luz:        fotoVal('luz'),
       // AGUA
-      lectura_agua: med.agua?.lectura_confirmada ?? '',
-      ant_agua:     med.agua?.lectura_anterior   ?? '',
-      delta_agua:   fmtDelta(med.agua?.delta, med.agua?.primera_lectura),
-      ocr_agua:     med.agua?.lectura_ocr        ?? '',
-      conf_agua:    capFirst(med.agua?.confianza_ocr),
-      acc_agua:     med.agua?.sin_acceso ? 'Sí' : '',
-      motivo_agua:  med.agua?.motivo_sin_acceso  ?? '',
-      foto_agua:    fotoVal('agua'),
+      lectura_agua:    med.agua?.lectura_confirmada ?? '',
+      ant_agua:        med.agua?.lectura_anterior   ?? '',
+      delta_agua:      fmtDelta(med.agua?.delta, med.agua?.primera_lectura),
+      ocr_agua:        med.agua?.lectura_ocr        ?? '',
+      conf_agua:       capFirst(med.agua?.confianza_ocr),
+      acc_agua:        med.agua?.sin_acceso ? 'Sí' : '',
+      motivo_agua:     med.agua?.motivo_sin_acceso  ?? '',
+      fecha_foto_agua: fmtFechaCorta(med.agua?.hora_foto),
+      hora_foto_agua:  fmtHora(med.agua?.hora_foto),
+      foto_agua:       fotoVal('agua'),
       // GAS
-      lectura_gas:  med.gas?.lectura_confirmada ?? '',
-      ant_gas:      med.gas?.lectura_anterior   ?? '',
-      delta_gas:    fmtDelta(med.gas?.delta, med.gas?.primera_lectura),
-      ocr_gas:      med.gas?.lectura_ocr        ?? '',
-      conf_gas:     capFirst(med.gas?.confianza_ocr),
-      acc_gas:      med.gas?.sin_acceso  ? 'Sí' : '',
-      motivo_gas:   med.gas?.motivo_sin_acceso  ?? '',
-      foto_gas:     fotoVal('gas'),
+      lectura_gas:     med.gas?.lectura_confirmada ?? '',
+      ant_gas:         med.gas?.lectura_anterior   ?? '',
+      delta_gas:       fmtDelta(med.gas?.delta, med.gas?.primera_lectura),
+      ocr_gas:         med.gas?.lectura_ocr        ?? '',
+      conf_gas:        capFirst(med.gas?.confianza_ocr),
+      acc_gas:         med.gas?.sin_acceso  ? 'Sí' : '',
+      motivo_gas:      med.gas?.motivo_sin_acceso  ?? '',
+      fecha_foto_gas:  fmtFechaCorta(med.gas?.hora_foto),
+      hora_foto_gas:   fmtHora(med.gas?.hora_foto),
+      foto_gas:        fotoVal('gas'),
       // REVISIÓN
       estado:          capFirst(v.estado ?? 'pendiente'),
       alerta_ocr:      tieneAlerta ? 'Revisar' : '',

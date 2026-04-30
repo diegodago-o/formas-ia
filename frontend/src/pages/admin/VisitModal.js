@@ -368,12 +368,22 @@ export default function VisitModal({ visitId, onClose, onUpdated }) {
                         ) : (
                           <>
                             {m.foto_path ? (
-                              <img
-                                src={`/uploads/${m.foto_path}`}
-                                alt={`Medidor ${tipo}`}
-                                className={styles.medFoto}
-                                onClick={() => setLightbox(`/uploads/${m.foto_path}`)}
-                              />
+                              <>
+                                <img
+                                  src={`/uploads/${m.foto_path}`}
+                                  alt={`Medidor ${tipo}`}
+                                  className={styles.medFoto}
+                                  onClick={() => setLightbox(`/uploads/${m.foto_path}`)}
+                                />
+                                <div className={styles.horaFotoTag}>
+                                  📷 {m.hora_foto
+                                    ? new Date(m.hora_foto).toLocaleString('es-CO', {
+                                        day: '2-digit', month: '2-digit', year: 'numeric',
+                                        hour: '2-digit', minute: '2-digit',
+                                      })
+                                    : 'Sin metadatos de captura'}
+                                </div>
+                              </>
                             ) : (
                               <div className={styles.noFotoBox}>
                                 <span className={styles.noFotoIcon}>📷</span>

@@ -201,6 +201,17 @@
 .lecturaVal { font-size: 1.15rem; color: var(--primary); font-family: 'Courier New', monospace; font-weight: 800; }
 .notaOcr { font-size: 0.78rem; color: var(--text-muted); font-style: italic; }
 
+/* Timestamp de captura debajo de la foto */
+.horaFotoTag {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  background: var(--bg);
+  border-top: 1px solid var(--border);
+  padding: 5px 10px;
+  text-align: center;
+  letter-spacing: 0.01em;
+}
+
 /* Estado y acciones */
 .motivoBox {
   background: #FEE2E2;
