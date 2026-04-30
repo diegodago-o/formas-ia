@@ -47,6 +47,7 @@ export async function syncPendingVisits(onProgress) {
               lectura:           m.lectura           || null,
               sin_acceso:        m.sin_acceso        || false,
               motivo_sin_acceso: m.motivo_sin_acceso || null,
+              hora_foto:         m.hora_foto         || null,
             };
             continue;
           }
@@ -79,6 +80,7 @@ export async function syncPendingVisits(onProgress) {
               lectura:           m.lectura           || null,
               sin_acceso:        m.sin_acceso        || false,
               motivo_sin_acceso: m.motivo_sin_acceso || null,
+              hora_foto:         m.hora_foto         || null,
             };
           } else {
             // ── CASO C: entrada manual o sin_acceso, sin foto ─────────────
@@ -87,6 +89,7 @@ export async function syncPendingVisits(onProgress) {
               lectura:           m.lectura           || null,
               sin_acceso:        m.sin_acceso        || false,
               motivo_sin_acceso: m.motivo_sin_acceso || null,
+              hora_foto:         m.hora_foto         || null,
             };
           }
         }
@@ -173,6 +176,7 @@ export async function syncPendingSubsanaciones(onProgress) {
             medidoresPayload[medidorId] = {
               foto_path: foto_path || null,
               lectura:   datos.lectura?.trim() || null,
+              hora_foto: datos.hora_foto || null,
             };
           }
         }

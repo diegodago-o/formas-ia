@@ -442,6 +442,7 @@ export default function NewVisit() {
           lectura:           m.lectura           || null,
           sin_acceso:        m.sin_acceso        || false,
           motivo_sin_acceso: m.motivo_sin_acceso || null,
+          hora_foto:         m.hora_foto         || null,
         };
       }
       return acc;
@@ -528,6 +529,7 @@ export default function NewVisit() {
             lectura:           m.lectura           || null,
             sin_acceso:        m.sin_acceso        || false,
             motivo_sin_acceso: m.motivo_sin_acceso || null,
+            hora_foto:         m.hora_foto         || null,
           };
         }
         await api.post('/visits', {

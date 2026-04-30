@@ -247,9 +247,15 @@ router.post('/', authMiddleware, ah(async (req, res) => {
 
       const requiereRevision = (flagDelta || flagAcceso || flagFoto || flagManual) ? 1 : 0;
 
-      // Extraer hora de captura del EXIF antes de insertar
+      // Hora de captura: prioridad → valor enviado por el cliente (file.lastModified
+      // capturado antes de que canvas.toBlob() destruya el EXIF), fallback → EXIF
+      // del archivo en disco (cubre subsanaciones y casos legacy).
       let horaFoto = null;
-      if (foto_path) {
+      if (m.hora_foto) {
+        const d = new Date(m.hora_foto);
+        if (!isNaN(d.getTime())) horaFoto = d;
+      }
+      if (!horaFoto && foto_path) {
         const uploadsDir = path.join(__dirname, '../../', process.env.UPLOADS_DIR || 'uploads');
         horaFoto = await leerHoraFoto(path.join(uploadsDir, foto_path));
       }
@@ -370,9 +376,16 @@ router.post('/:id/subsanar', authMiddleware, ah(async (req, res) => {
     const lectura = datos.lectura ? datos.lectura.replace(',', '.') : null;
 
     if (datos.foto_path) {
-      // Nueva foto → reset completo + OCR pendiente + EXIF
-      const uploadsDir2 = path.join(__dirname, '../../', process.env.UPLOADS_DIR || 'uploads');
-      const horaFotoSub = await leerHoraFoto(path.join(uploadsDir2, datos.foto_path));
+      // Hora de captura: prioridad → valor del cliente, fallback → EXIF del archivo
+      let horaFotoSub = null;
+      if (datos.hora_foto) {
+        const d = new Date(datos.hora_foto);
+        if (!isNaN(d.getTime())) horaFotoSub = d;
+      }
+      if (!horaFotoSub) {
+        const uploadsDir2 = path.join(__dirname, '../../', process.env.UPLOADS_DIR || 'uploads');
+        horaFotoSub = await leerHoraFoto(path.join(uploadsDir2, datos.foto_path));
+      }
 
       await pool.query(
         `UPDATE medidores SET

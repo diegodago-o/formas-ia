@@ -99,13 +99,15 @@ export default function AuditorVisitModal({ visitId, autoAnular, onClose, onUpda
   const handleFotoChange = async (medidorId, file) => {
     if (!file) return;
     setSubsanarError('');
-    const preview = URL.createObjectURL(file);
+    const preview  = URL.createObjectURL(file);
+    // Capturar hora de la foto desde el archivo original antes de cualquier procesamiento
+    const horaFoto = new Date(file.lastModified).toISOString();
 
     if (navigator.onLine) {
       // Subir foto inmediatamente
       setSubsanarData(prev => ({
         ...prev,
-        [medidorId]: { ...prev[medidorId], preview, uploading: true, foto_path: null, foto_file: null },
+        [medidorId]: { ...prev[medidorId], preview, uploading: true, foto_path: null, foto_file: null, hora_foto: horaFoto },
       }));
       try {
         const form = new FormData();
@@ -118,7 +120,7 @@ export default function AuditorVisitModal({ visitId, autoAnular, onClose, onUpda
       } catch {
         setSubsanarData(prev => ({
           ...prev,
-          [medidorId]: { ...prev[medidorId], uploading: false, preview: null },
+          [medidorId]: { ...prev[medidorId], uploading: false, preview: null, hora_foto: null },
         }));
         setSubsanarError('Error al subir la foto. Inténtalo de nuevo.');
       }
@@ -126,7 +128,7 @@ export default function AuditorVisitModal({ visitId, autoAnular, onClose, onUpda
       // Sin red: guardar File en estado (se subirá al sincronizar)
       setSubsanarData(prev => ({
         ...prev,
-        [medidorId]: { ...prev[medidorId], preview, foto_file: file, foto_path: null, uploading: false },
+        [medidorId]: { ...prev[medidorId], preview, foto_file: file, foto_path: null, uploading: false, hora_foto: horaFoto },
       }));
     }
   };
@@ -171,6 +173,7 @@ export default function AuditorVisitModal({ visitId, autoAnular, onClose, onUpda
               foto_path: datos.foto_path || null,
               foto_file: datos.foto_file || null, // File es serializable en IndexedDB
               lectura:   datos.lectura?.trim() || null,
+              hora_foto: datos.hora_foto || null,
             };
           }
         }
@@ -193,6 +196,7 @@ export default function AuditorVisitModal({ visitId, autoAnular, onClose, onUpda
           medidoresPayload[id] = {
             foto_path: datos.foto_path || null,
             lectura:   datos.lectura?.trim() || null,
+            hora_foto: datos.hora_foto || null,
           };
         }
       }

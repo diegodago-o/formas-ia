@@ -35,6 +35,12 @@ export default function MeterField({ tipo, data, onChange, onFile, isOnline = tr
   const [lecturaSaved,   setLecturaSaved]   = useState(() => !!data.lectura);
 
   const processFile = async (file) => {
+    // Capturar hora de la foto ANTES de comprimir:
+    // canvas.toBlob() crea un nuevo JPEG sin EXIF, por lo que la hora debe
+    // extraerse del archivo original. file.lastModified es el instante de
+    // captura para fotos tomadas directamente con la cámara del dispositivo.
+    const horaFoto = new Date(file.lastModified).toISOString();
+    onChange('hora_foto', horaFoto);
 
     onChange('preview', URL.createObjectURL(file));
     onChange('lectura', '');
