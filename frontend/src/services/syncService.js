@@ -209,9 +209,11 @@ export async function syncPendingSubsanaciones(onProgress) {
  */
 export function registerSyncListener(onProgress) {
   window.addEventListener('online', () => {
+    // 5 segundos: tiempo suficiente para que la ruta WiFi esté completamente
+    // establecida antes de intentar sincronizar (1500 ms era insuficiente en móvil).
     setTimeout(() => {
       syncPendingVisits(onProgress);
       syncPendingSubsanaciones(onProgress);
-    }, 1500);
+    }, 5000);
   });
 }

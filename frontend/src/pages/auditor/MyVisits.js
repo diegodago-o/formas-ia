@@ -46,7 +46,9 @@ export default function MyVisits() {
   const [loading, setLoading]         = useState(true);
   const [syncing, setSyncing]         = useState(false);
   const [selectedId, setSelectedId]   = useState(null);
-  const initialSyncDone = useRef(false);
+  const initialSyncDone  = useRef(false);
+  const retryTimerRef    = useRef(null);
+  const handleSyncRef    = useRef(null); // para el auto-retry sin closures stale
 
   const loadServer = useCallback(async () => {
     if (!online) {
@@ -90,6 +92,18 @@ export default function MyVisits() {
 
   useEffect(() => { load(); }, [load]);
 
+  const handleSync = async () => {
+    if (syncing || !online) return;
+    setSyncing(true);
+    await syncPendingVisits();
+    await syncPendingSubsanaciones(); // también sincroniza subsanaciones offline
+    await load();
+    setSyncing(false);
+  };
+
+  // Mantener la ref actualizada para que los timers usen siempre la versión fresca
+  handleSyncRef.current = handleSync;
+
   // Sync automático al recuperar señal
   useEffect(() => {
     if (online && pending.length > 0) {
@@ -105,14 +119,18 @@ export default function MyVisits() {
     }
   }, [loading]); // eslint-disable-line
 
-  const handleSync = async () => {
-    if (syncing || !online) return;
-    setSyncing(true);
-    await syncPendingVisits();
-    await syncPendingSubsanaciones(); // también sincroniza subsanaciones offline
-    await load();
-    setSyncing(false);
-  };
+  // Auto-retry: si hay visitas con error y tenemos conexión, reintentar en 30 s.
+  // Cubre el caso donde el primer intento falló pero el dispositivo YA estaba online
+  // (no hay nuevo evento 'online' que vuelva a disparar el sync automático).
+  useEffect(() => {
+    clearTimeout(retryTimerRef.current);
+    const errorVisits = pending.filter(v => v.status === 'error');
+    if (errorVisits.length === 0 || !online || syncing) return;
+    retryTimerRef.current = setTimeout(() => {
+      handleSyncRef.current?.();
+    }, 30_000);
+    return () => clearTimeout(retryTimerRef.current);
+  }, [pending, online, syncing]); // eslint-disable-line
 
   const discardLocal = async (localId) => {
     if (!window.confirm('¿Eliminar esta visita local? No se podrá recuperar.')) return;
