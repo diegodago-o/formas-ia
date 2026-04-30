@@ -192,7 +192,9 @@ router.post('/', authMiddleware, ah(async (req, res) => {
         observaciones || null,
         hora_inicio           ? new Date(hora_inicio)           : null,
         hora_fin              ? new Date(hora_fin)              : null,
-        hora_sincronizacion   ? new Date(hora_sincronizacion)   : null,
+        // Online: hora_sincronizacion no viene → usar NOW() del servidor
+        // Offline: viene del syncService → momento real de sincronización
+        hora_sincronizacion   ? new Date(hora_sincronizacion)   : new Date(),
       ]
     );
     const visitaId = visitResult.insertId;

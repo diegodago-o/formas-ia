@@ -46,11 +46,11 @@ function fmtDelta(delta, primeraLectura) {
 // Cada sección: [etiqueta, col_desde, col_hasta, argb_fila1, argb_fila2]
 // Cada medidor tiene 10 columnas (+ 2 de fecha/hora foto respecto a antes)
 const SECCIONES = [
-  ['IDENTIFICACIÓN DE LA VISITA',       1,  12, 'FF1E3A5F', 'FF2D5080'],
-  ['MEDIDOR DE ELECTRICIDAD (kWh)',     13,  22, 'FF78350F', 'FF92400E'],
-  ['MEDIDOR DE AGUA (m³)',              23,  32, 'FF1E3A8A', 'FF1D4ED8'],
-  ['MEDIDOR DE GAS (m³)',               33,  42, 'FF7F1D1D', 'FF991B1B'],
-  ['REVISIÓN Y ESTADO',                 43,  46, 'FF1F2937', 'FF374151'],
+  ['IDENTIFICACIÓN DE LA VISITA',       1,  13, 'FF1E3A5F', 'FF2D5080'],
+  ['MEDIDOR DE ELECTRICIDAD (kWh)',     14,  23, 'FF78350F', 'FF92400E'],
+  ['MEDIDOR DE AGUA (m³)',              24,  33, 'FF1E3A8A', 'FF1D4ED8'],
+  ['MEDIDOR DE GAS (m³)',               34,  43, 'FF7F1D1D', 'FF991B1B'],
+  ['REVISIÓN Y ESTADO',                 44,  47, 'FF1F2937', 'FF374151'],
 ];
 
 // Índice sección por columna (para fila 2)
@@ -58,8 +58,8 @@ const seccionDeColumna = (col) => SECCIONES.find(([, f, t]) => col >= f && col <
 
 // Encabezados de columna (fila 2) — 46 columnas
 const COL_HEADERS = [
-  // IDENTIFICACIÓN (1-12)
-  '#', 'Fecha y Hora', 'Hora Inicio', 'Hora Fin', 'Duración',
+  // IDENTIFICACIÓN (1-13)
+  '#', 'Fecha y Hora', 'Hora Inicio', 'Hora Fin', 'Hora Sync', 'Duración',
   'Auditor', 'Ciudad', 'Conjunto', 'Torre', 'Apartamento',
   'Latitud', 'Longitud',
   // LUZ (13-22)
@@ -145,6 +145,7 @@ router.get('/excel', authMiddleware, requireRole('admin'), ah(async (req, res) =
     { key: 'fecha',           width: 19 },
     { key: 'hora_inicio',     width: 10 },
     { key: 'hora_fin',        width: 10 },
+    { key: 'hora_sinc',       width: 11 },
     { key: 'duracion',        width: 10 },
     { key: 'auditor',         width: 20 },
     { key: 'ciudad',          width: 16 },
@@ -222,7 +223,7 @@ router.get('/excel', authMiddleware, requireRole('admin'), ah(async (req, res) =
     cell.border    = { bottom: { style: 'medium', color: { argb: 'FFE5E7EB' } } };
   });
 
-  ws.autoFilter = { from: { row: 2, column: 1 }, to: { row: 2, column: 46 } };
+  ws.autoFilter = { from: { row: 2, column: 1 }, to: { row: 2, column: 47 } };
 
   // ── FILAS DE DATOS ────────────────────────────────────────
   visitas.forEach((v, i) => {
@@ -243,6 +244,7 @@ router.get('/excel', authMiddleware, requireRole('admin'), ah(async (req, res) =
       fecha:        fmtFecha(v.hora_fin || v.fecha),
       hora_inicio:  fmtHora(v.hora_inicio),
       hora_fin:     fmtHora(v.hora_fin),
+      hora_sinc:    fmtHora(v.hora_sincronizacion),
       duracion:     calcDuracion(v.hora_inicio, v.hora_fin),
       auditor:      v.auditor,
       ciudad:       v.ciudad,
