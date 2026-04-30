@@ -171,7 +171,7 @@ router.post('/', authMiddleware, ah(async (req, res) => {
     const {
       latitud, longitud, ciudad_id, conjunto_id, torre_id,
       apartamento, observaciones, medidores: medidoresBody = {},
-      hora_inicio, hora_fin,
+      hora_inicio, hora_fin, hora_sincronizacion,
     } = req.body;
 
     if (!ciudad_id || !conjunto_id || !apartamento) {
@@ -180,8 +180,9 @@ router.post('/', authMiddleware, ah(async (req, res) => {
 
     const [visitResult] = await conn.query(
       `INSERT INTO visitas
-        (auditor_id, latitud, longitud, ciudad_id, conjunto_id, torre_id, apartamento, observaciones, hora_inicio, hora_fin)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        (auditor_id, latitud, longitud, ciudad_id, conjunto_id, torre_id, apartamento, observaciones,
+         hora_inicio, hora_fin, hora_sincronizacion)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         req.user.id,
         latitud || null, longitud || null,
@@ -189,8 +190,9 @@ router.post('/', authMiddleware, ah(async (req, res) => {
         torre_id || null,
         apartamento.trim(),
         observaciones || null,
-        hora_inicio ? new Date(hora_inicio) : null,
-        hora_fin    ? new Date(hora_fin)    : null,
+        hora_inicio           ? new Date(hora_inicio)           : null,
+        hora_fin              ? new Date(hora_fin)              : null,
+        hora_sincronizacion   ? new Date(hora_sincronizacion)   : null,
       ]
     );
     const visitaId = visitResult.insertId;

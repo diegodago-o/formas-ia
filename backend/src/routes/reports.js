@@ -96,7 +96,7 @@ router.get('/excel', authMiddleware, requireRole('admin'), ah(async (req, res) =
   const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
 
   const [visitas] = await pool.query(
-    `SELECT v.id, v.fecha, v.hora_inicio, v.hora_fin,
+    `SELECT v.id, v.fecha, v.hora_inicio, v.hora_fin, v.hora_sincronizacion,
             v.apartamento, v.observaciones, v.latitud, v.longitud,
             v.estado, v.motivo_rechazo,
             ci.nombre AS ciudad, c.nombre AS conjunto,
@@ -237,8 +237,10 @@ router.get('/excel', authMiddleware, requireRole('admin'), ah(async (req, res) =
 
     const r = ws.addRow({
       // IDENTIFICACIÓN
+      // Para visitas offline sincronizadas, v.fecha = hora de sync (MySQL CURRENT_TIMESTAMP).
+      // Usamos hora_fin como la fecha/hora real de la visita; v.fecha como fallback.
       id:           v.id,
-      fecha:        fmtFecha(v.fecha),
+      fecha:        fmtFecha(v.hora_fin || v.fecha),
       hora_inicio:  fmtHora(v.hora_inicio),
       hora_fin:     fmtHora(v.hora_fin),
       duracion:     calcDuracion(v.hora_inicio, v.hora_fin),

@@ -242,15 +242,27 @@ export default function VisitModal({ visitId, onClose, onUpdated }) {
                   </div>
                 ) : (
                   <div className={styles.grid}>
-                    <div className={styles.field}><label>Fecha</label><span>{new Date(visit.fecha).toLocaleString('es-CO')}</span></div>
+                    {/* Fecha real = hora_fin de la visita; fecha (MySQL) = hora de sync para visitas offline */}
+                    <div className={styles.field}>
+                      <label>Fecha</label>
+                      <span>{new Date(visit.hora_fin || visit.fecha).toLocaleString('es-CO')}</span>
+                    </div>
                     {visit.hora_inicio && (
-                      <div className={styles.field}><label>Hora inicio</label><span>{new Date(visit.hora_inicio).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}</span></div>
+                      <div className={styles.field}><label>Hora inicio</label><span>{new Date(visit.hora_inicio).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span></div>
                     )}
                     {visit.hora_fin && (
-                      <div className={styles.field}><label>Hora fin</label><span>{new Date(visit.hora_fin).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}</span></div>
+                      <div className={styles.field}><label>Hora fin</label><span>{new Date(visit.hora_fin).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span></div>
                     )}
                     {formatDuracion(visit.hora_inicio, visit.hora_fin) && (
                       <div className={styles.field}><label>Duración</label><span>{formatDuracion(visit.hora_inicio, visit.hora_fin)}</span></div>
+                    )}
+                    {visit.hora_sincronizacion && (
+                      <div className={styles.field}>
+                        <label>Sincronizado offline</label>
+                        <span title="La visita se tomó sin conexión y se sincronizó después">
+                          📶 {new Date(visit.hora_sincronizacion).toLocaleString('es-CO')}
+                        </span>
+                      </div>
                     )}
                     <div className={styles.field}><label>Auditor</label><span>{visit.auditor}</span></div>
                     <div className={styles.field}><label>Ciudad</label><span>{visit.ciudad}</span></div>

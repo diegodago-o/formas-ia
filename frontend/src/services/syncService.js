@@ -96,16 +96,18 @@ export async function syncPendingVisits(onProgress) {
 
         // ── Crear la visita en el servidor ──────────────────────────────
         const body = {
-          latitud:       visit.latitud,
-          longitud:      visit.longitud,
-          ciudad_id:     visit.ciudad_id,
-          conjunto_id:   visit.conjunto_id,
-          torre_id:      visit.torre_id      || null,
-          apartamento:   visit.apartamento,
-          observaciones: visit.observaciones || null,
-          medidores:     medidoresResueltos,
-          hora_inicio:   visit.hora_inicio   || null,
-          hora_fin:      visit.hora_fin      || null,
+          latitud:              visit.latitud,
+          longitud:             visit.longitud,
+          ciudad_id:            visit.ciudad_id,
+          conjunto_id:          visit.conjunto_id,
+          torre_id:             visit.torre_id      || null,
+          apartamento:          visit.apartamento,
+          observaciones:        visit.observaciones || null,
+          medidores:            medidoresResueltos,
+          hora_inicio:          visit.hora_inicio   || null,
+          hora_fin:             visit.hora_fin      || null,
+          // Momento real de sincronización — diferente a hora_fin para visitas offline
+          hora_sincronizacion:  new Date().toISOString(),
         };
 
         await api.post('/visits', body);
