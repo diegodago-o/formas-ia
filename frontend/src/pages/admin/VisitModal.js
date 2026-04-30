@@ -379,7 +379,7 @@ export default function VisitModal({ visitId, onClose, onUpdated }) {
                                   📷 {m.hora_foto
                                     ? new Date(m.hora_foto).toLocaleString('es-CO', {
                                         day: '2-digit', month: '2-digit', year: 'numeric',
-                                        hour: '2-digit', minute: '2-digit',
+                                        hour: '2-digit', minute: '2-digit', second: '2-digit',
                                       })
                                     : 'Sin metadatos de captura'}
                                 </div>

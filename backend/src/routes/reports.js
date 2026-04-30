@@ -25,7 +25,7 @@ const fmtFecha = (d) => d
   : '';
 
 const fmtHora = (d) => d
-  ? new Date(d).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })
+  ? new Date(d).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
   : '';
 
 const fmtFechaCorta = (d) => d
@@ -162,7 +162,7 @@ router.get('/excel', authMiddleware, requireRole('admin'), ah(async (req, res) =
     { key: 'acc_luz',         width: 10 },
     { key: 'motivo_luz',      width: 26 },
     { key: 'fecha_foto_luz',  width: 12 },
-    { key: 'hora_foto_luz',   width: 9  },
+    { key: 'hora_foto_luz',   width: 11 },
     { key: 'foto_luz',        width: 9  },
     // AGUA (10 cols)
     { key: 'lectura_agua',    width: 14 },
@@ -173,7 +173,7 @@ router.get('/excel', authMiddleware, requireRole('admin'), ah(async (req, res) =
     { key: 'acc_agua',        width: 10 },
     { key: 'motivo_agua',     width: 26 },
     { key: 'fecha_foto_agua', width: 12 },
-    { key: 'hora_foto_agua',  width: 9  },
+    { key: 'hora_foto_agua',  width: 11 },
     { key: 'foto_agua',       width: 9  },
     // GAS (10 cols)
     { key: 'lectura_gas',     width: 14 },
@@ -184,7 +184,7 @@ router.get('/excel', authMiddleware, requireRole('admin'), ah(async (req, res) =
     { key: 'acc_gas',         width: 10 },
     { key: 'motivo_gas',      width: 26 },
     { key: 'fecha_foto_gas',  width: 12 },
-    { key: 'hora_foto_gas',   width: 9  },
+    { key: 'hora_foto_gas',   width: 11 },
     { key: 'foto_gas',        width: 9  },
     // REVISIÓN (4 cols)
     { key: 'estado',          width: 12 },
