@@ -95,12 +95,19 @@ router.get('/visits', ...isAdmin, ah(async (req, res) => {
   if (hasta)            { conditions.push('DATE(v.fecha) <= ?'); params.push(hasta); }
   if (estado)           { conditions.push('v.estado = ?');       params.push(estado); }
   if (busqueda?.trim()) {
-    const q = `%${busqueda.trim()}%`;
-    conditions.push(
-      `(CAST(v.id AS CHAR) LIKE ? OR c.nombre LIKE ? OR ci.nombre LIKE ?
-        OR u.nombre LIKE ? OR v.apartamento LIKE ?)`
-    );
-    params.push(q, q, q, q, q);
+    const term = busqueda.trim();
+    if (/^\d+$/.test(term)) {
+      // Número puro → coincidencia exacta por ID
+      conditions.push('v.id = ?');
+      params.push(parseInt(term, 10));
+    } else {
+      // Texto → LIKE en conjunto, ciudad, auditor y apartamento
+      const q = `%${term}%`;
+      conditions.push(
+        `(c.nombre LIKE ? OR ci.nombre LIKE ? OR u.nombre LIKE ? OR v.apartamento LIKE ?)`
+      );
+      params.push(q, q, q, q);
+    }
   }
   if (requiere_revision === '1') {
     conditions.push('EXISTS (SELECT 1 FROM medidores m WHERE m.visita_id = v.id AND m.requiere_revision = 1)');
