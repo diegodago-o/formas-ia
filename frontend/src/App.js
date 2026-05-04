@@ -73,6 +73,8 @@ function PrivateRoute({ children, adminOnly = false, strictAdmin = false }) {
     </div>
   );
   if (!user) return <Navigate to="/login" replace />;
+  // Admin y consulta no deben entrar a las páginas de auditor
+  if (!adminOnly && !strictAdmin && ['admin', 'consulta'].includes(user.rol)) return <Navigate to="/admin" replace />;
   if (adminOnly  && !['admin', 'consulta'].includes(user.rol)) return <Navigate to="/" replace />;
   if (strictAdmin && user.rol !== 'admin') return <Navigate to="/admin" replace />;
   return children;
