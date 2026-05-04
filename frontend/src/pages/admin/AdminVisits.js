@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import api from '../../services/api';
 import VisitModal from './VisitModal';
 import styles from './AdminVisits.module.css';
@@ -11,9 +12,14 @@ const ESTADO_STYLE = {
 };
 
 export default function AdminVisits() {
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // Si el dashboard envió ?estado=xxx, arrancamos con ese filtro pre-aplicado
+  const estadoInicial = searchParams.get('estado') || '';
+
   const [data, setData]             = useState({ data: [], total: 0 });
   const [page, setPage]             = useState(1);
-  const [filters, setFilters]       = useState({ desde: '', hasta: '', estado: '', requiere_revision: '' });
+  const [filters, setFilters]       = useState({ desde: '', hasta: '', estado: estadoInicial, requiere_revision: '' });
   const [busqueda, setBusqueda]     = useState('');
   const [loading, setLoading]       = useState(true);
   const [selectedId, setSelectedId] = useState(null);
@@ -31,7 +37,11 @@ export default function AdminVisits() {
     api.get(`/admin/visits?${params}`).then(r => setData(r.data)).finally(() => setLoading(false));
   };
 
-  useEffect(() => { load(); }, []); // eslint-disable-line
+  useEffect(() => {
+    load();
+    // Limpiar el query param de la URL para que no quede desincronizado
+    if (estadoInicial) setSearchParams({}, { replace: true });
+  }, []); // eslint-disable-line
 
   // Debounce: buscar automáticamente 400 ms después de dejar de escribir
   const handleBusqueda = (valor) => {
