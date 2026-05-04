@@ -75,6 +75,7 @@ export default function AdminUsers() {
           <select value={form.rol} onChange={e => setForm(f => ({...f, rol: e.target.value}))}>
             <option value="auditor">Auditor</option>
             <option value="admin">Administrador</option>
+            <option value="consulta">Consulta (solo Dashboard)</option>
           </select>
           <button type="submit">+ Crear usuario</button>
         </form>

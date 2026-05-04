@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../../context/AuthContext';
 import api from '../../services/api';
 import styles from './AdminDashboard.module.css';
 
@@ -15,7 +16,9 @@ const fmtISO = d => d.toISOString().split('T')[0];
 const hoy = () => fmtISO(new Date());
 
 export default function AdminDashboard() {
-  const navigate = useNavigate();
+  const navigate    = useNavigate();
+  const { user }    = useAuth();
+  const isConsulta  = user?.rol === 'consulta';
 
   const [stats,        setStats]        = useState(null);
   const [loading,      setLoading]      = useState(true);
@@ -103,40 +106,55 @@ export default function AdminDashboard() {
 
       {/* ── Fila 1: métricas principales ─────────────── */}
       <div className={styles.topRow}>
-        <button className={`${styles.metricCard} ${styles.total}`} onClick={() => navigate('/admin/visitas')}>
+        <button
+          className={`${styles.metricCard} ${styles.total}`}
+          onClick={() => !isConsulta && navigate('/admin/visitas')}
+          style={isConsulta ? { cursor: 'default' } : {}}
+        >
           <span className={styles.metricIcon}>📋</span>
           <span className={styles.metricValue}>{loading ? '–' : granTotal}</span>
           <span className={styles.metricLabel}>Total visitas</span>
         </button>
 
-        <button className={`${styles.metricCard} ${styles.alertasPendientes}`} onClick={() => navigate('/admin/alertas')}>
+        <button
+          className={`${styles.metricCard} ${styles.alertasPendientes}`}
+          onClick={() => !isConsulta && navigate('/admin/alertas')}
+          style={isConsulta ? { cursor: 'default' } : {}}
+        >
           <span className={styles.metricIcon}>⚠️</span>
           <span className={styles.metricValue}>{loading ? '–' : s?.alertas_pendientes ?? 0}</span>
           <span className={styles.metricLabel}>Alertas OCR pendientes</span>
         </button>
 
-        <button className={`${styles.metricCard} ${styles.revisadas}`} onClick={() => navigate('/admin/visitas')}>
+        <button
+          className={`${styles.metricCard} ${styles.revisadas}`}
+          onClick={() => !isConsulta && navigate('/admin/visitas')}
+          style={isConsulta ? { cursor: 'default' } : {}}
+        >
           <span className={styles.metricIcon}>🔍</span>
           <span className={styles.metricValue}>{loading ? '–' : s?.revisadas ?? 0}</span>
           <span className={styles.metricLabel}>Visitas revisadas</span>
         </button>
       </div>
 
-      {/* ── Fila 2: visitas por estado ────────────────── */}
+      {/* ── Fila 2: visitas por estado (consulta no ve anuladas) ─── */}
       <div className={styles.sectionTitle}>Visitas por estado</div>
       <div className={styles.estadosRow}>
-        {Object.entries(ESTADO_META).map(([key, meta]) => (
-          <button
-            key={key}
-            className={styles.estadoCard}
-            style={{ '--estado-color': meta.color, '--estado-bg': meta.bg }}
-            onClick={() => navigate(`/admin/visitas?estado=${key}`)}
-          >
-            <span className={styles.estadoIcon}>{meta.icon}</span>
-            <span className={styles.estadoValue}>{loading ? '–' : s?.[key] ?? 0}</span>
-            <span className={styles.estadoLabel}>{meta.label}</span>
-          </button>
-        ))}
+        {Object.entries(ESTADO_META)
+          .filter(([key]) => !(isConsulta && key === 'anulada'))
+          .map(([key, meta]) => (
+            <button
+              key={key}
+              className={styles.estadoCard}
+              style={{ '--estado-color': meta.color, '--estado-bg': meta.bg,
+                       ...(isConsulta ? { cursor: 'default' } : {}) }}
+              onClick={() => !isConsulta && navigate(`/admin/visitas?estado=${key}`)}
+            >
+              <span className={styles.estadoIcon}>{meta.icon}</span>
+              <span className={styles.estadoValue}>{loading ? '–' : s?.[key] ?? 0}</span>
+              <span className={styles.estadoLabel}>{meta.label}</span>
+            </button>
+          ))}
       </div>
 
       {/* ── Fila 3: visitas por ciudad → conjunto ─────── */}

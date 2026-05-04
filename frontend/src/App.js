@@ -60,7 +60,9 @@ class ErrorBoundary extends React.Component {
 }
 
 // ── Private Route ─────────────────────────────────────────────────
-function PrivateRoute({ children, adminOnly = false }) {
+// adminOnly  → permite admin y consulta (acceso al layout)
+// strictAdmin→ solo admin (visitas, alertas, catálogos, usuarios)
+function PrivateRoute({ children, adminOnly = false, strictAdmin = false }) {
   const { user, loading } = useAuth();
   if (loading) return (
     <div style={{
@@ -71,7 +73,8 @@ function PrivateRoute({ children, adminOnly = false }) {
     </div>
   );
   if (!user) return <Navigate to="/login" replace />;
-  if (adminOnly && user.rol !== 'admin') return <Navigate to="/" replace />;
+  if (adminOnly  && !['admin', 'consulta'].includes(user.rol)) return <Navigate to="/" replace />;
+  if (strictAdmin && user.rol !== 'admin') return <Navigate to="/admin" replace />;
   return children;
 }
 
@@ -94,15 +97,16 @@ export default function App() {
               <PrivateRoute><ErrorBoundary><MyVisits /></ErrorBoundary></PrivateRoute>
             } />
 
-            {/* Admin */}
+            {/* Admin + Consulta — layout compartido */}
             <Route path="/admin" element={
               <PrivateRoute adminOnly><ErrorBoundary><AdminLayout /></ErrorBoundary></PrivateRoute>
             }>
               <Route index element={<AdminDashboard />} />
-              <Route path="visitas"   element={<AdminVisits />} />
-              <Route path="alertas"   element={<AdminAlerts />} />
-              <Route path="catalogos" element={<AdminCatalogs />} />
-              <Route path="usuarios"  element={<AdminUsers />} />
+              {/* Solo admin completo puede acceder a estas secciones */}
+              <Route path="visitas"   element={<PrivateRoute strictAdmin><AdminVisits /></PrivateRoute>} />
+              <Route path="alertas"   element={<PrivateRoute strictAdmin><AdminAlerts /></PrivateRoute>} />
+              <Route path="catalogos" element={<PrivateRoute strictAdmin><AdminCatalogs /></PrivateRoute>} />
+              <Route path="usuarios"  element={<PrivateRoute strictAdmin><AdminUsers /></PrivateRoute>} />
             </Route>
 
             <Route path="*" element={<Navigate to="/" replace />} />

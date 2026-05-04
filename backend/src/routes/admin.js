@@ -6,22 +6,22 @@ const { pool } = require('../models/db');
 const { authMiddleware, requireRole } = require('../middleware/auth');
 const ah = require('../middleware/asyncHandler');
 
-const isAdmin = [authMiddleware, requireRole('admin')];
-
-// Email con permiso exclusivo para eliminar visitas.
-// Configurable vía variable de entorno SUPERADMIN_EMAIL.
-const SUPERADMIN_EMAIL = (process.env.SUPERADMIN_EMAIL || 'admin@formas-ia.com').toLowerCase();
+const isAdmin           = [authMiddleware, requireRole('admin')];
+const isAdminOrConsulta = [authMiddleware, requireRole('admin', 'consulta')];
 
 // GET /api/admin/stats  — métricas para el dashboard
 // Query params: desde=YYYY-MM-DD, hasta=YYYY-MM-DD (ambos opcionales)
-router.get('/stats', ...isAdmin, ah(async (req, res) => {
+// El rol 'consulta' tiene acceso pero no ve visitas anuladas.
+router.get('/stats', ...isAdminOrConsulta, ah(async (req, res) => {
   const { desde, hasta } = req.query;
+  const isConsulta = req.user.rol === 'consulta';
 
   // WHERE reutilizable para ambas queries
   const conds  = [];
   const params = [];
-  if (desde) { conds.push('DATE(v.fecha) >= ?'); params.push(desde); }
-  if (hasta) { conds.push('DATE(v.fecha) <= ?'); params.push(hasta); }
+  if (desde)      { conds.push('DATE(v.fecha) >= ?'); params.push(desde); }
+  if (hasta)      { conds.push('DATE(v.fecha) <= ?'); params.push(hasta); }
+  if (isConsulta) { conds.push("v.estado != 'anulada'"); }
   const where = conds.length ? `WHERE ${conds.join(' AND ')}` : '';
 
   const [[estados]] = await pool.query(

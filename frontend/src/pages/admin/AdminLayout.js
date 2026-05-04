@@ -3,7 +3,7 @@ import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import styles from './AdminLayout.module.css';
 
-const NAV = [
+const NAV_ADMIN = [
   { path: '/admin',           icon: '📊', label: 'Dashboard'  },
   { path: '/admin/visitas',   icon: '📋', label: 'Visitas'    },
   { path: '/admin/alertas',   icon: '⚠️',  label: 'Alertas OCR'},
@@ -11,11 +11,22 @@ const NAV = [
   { path: '/admin/usuarios',  icon: '👥', label: 'Usuarios'   },
 ];
 
+const NAV_CONSULTA = [
+  { path: '/admin', icon: '📊', label: 'Dashboard' },
+];
+
+const ROL_LABEL = {
+  admin:    'Administrador',
+  consulta: 'Consulta',
+  auditor:  'Auditor',
+};
+
 export default function AdminLayout() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [sideOpen, setSideOpen] = useState(false);
+  const nav = user?.rol === 'consulta' ? NAV_CONSULTA : NAV_ADMIN;
 
   return (
     <div className={styles.shell}>
@@ -27,10 +38,10 @@ export default function AdminLayout() {
         </div>
         <div className={styles.userInfo}>
           <div className={styles.userName}>{user?.nombre}</div>
-          <div className={styles.userRole}>Administrador</div>
+          <div className={styles.userRole}>{ROL_LABEL[user?.rol] || user?.rol}</div>
         </div>
         <nav className={styles.nav}>
-          {NAV.map(n => (
+          {nav.map(n => (
             <button
               key={n.path}
               className={`${styles.navItem} ${location.pathname === n.path ? styles.active : ''}`}
@@ -50,7 +61,7 @@ export default function AdminLayout() {
       <div className={styles.content}>
         <header className={styles.topbar}>
           <button className={styles.menuBtn} onClick={() => setSideOpen(true)}>☰</button>
-          <span className={styles.topTitle}>{NAV.find(n => location.pathname === n.path)?.label || 'Admin'}</span>
+          <span className={styles.topTitle}>{nav.find(n => location.pathname === n.path)?.label || 'Admin'}</span>
         </header>
         <main className={styles.main}><Outlet /></main>
       </div>
