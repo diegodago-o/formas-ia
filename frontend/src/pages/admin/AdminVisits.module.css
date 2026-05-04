@@ -1,3 +1,31 @@
+/* ── Buscador rápido ──────────────────────────────────── */
+.searchRow {
+  position: relative;
+  display: flex;
+  align-items: center;
+  margin-bottom: 10px;
+}
+.searchInput {
+  width: 100%;
+  padding: 10px 40px 10px 14px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 0.9rem;
+  background: var(--surface);
+  color: var(--text);
+  outline: none;
+  transition: border-color 0.15s;
+}
+.searchInput:focus { border-color: var(--primary); }
+.btnClearSearch {
+  position: absolute; right: 10px;
+  background: none; border: none; cursor: pointer;
+  font-size: 0.85rem; color: var(--text-muted);
+  line-height: 1; padding: 4px;
+}
+.btnClearSearch:hover { color: var(--text); }
+
+/* ── Filtros ──────────────────────────────────────────── */
 .filters {
   display: flex;
   flex-wrap: wrap;

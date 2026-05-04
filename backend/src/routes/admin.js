@@ -79,7 +79,7 @@ const SORT_COLS = {
 
 router.get('/visits', ...isAdmin, ah(async (req, res) => {
   const { ciudad_id, conjunto_id, auditor_id, desde, hasta, requiere_revision, estado,
-          sort_by, sort_dir, page = 1, limit = 20 } = req.query;
+          busqueda, sort_by, sort_dir, page = 1, limit = 20 } = req.query;
   const offset = (page - 1) * limit;
 
   // ORDER BY dinámico con lista blanca
@@ -94,6 +94,14 @@ router.get('/visits', ...isAdmin, ah(async (req, res) => {
   if (desde)            { conditions.push('DATE(v.fecha) >= ?'); params.push(desde); }
   if (hasta)            { conditions.push('DATE(v.fecha) <= ?'); params.push(hasta); }
   if (estado)           { conditions.push('v.estado = ?');       params.push(estado); }
+  if (busqueda?.trim()) {
+    const q = `%${busqueda.trim()}%`;
+    conditions.push(
+      `(CAST(v.id AS CHAR) LIKE ? OR c.nombre LIKE ? OR ci.nombre LIKE ?
+        OR u.nombre LIKE ? OR v.apartamento LIKE ?)`
+    );
+    params.push(q, q, q, q, q);
+  }
   if (requiere_revision === '1') {
     conditions.push('EXISTS (SELECT 1 FROM medidores m WHERE m.visita_id = v.id AND m.requiere_revision = 1)');
   }
@@ -349,13 +357,8 @@ router.patch('/users/:id', ...isAdmin, ah(async (req, res) => {
   res.json({ ok: true });
 }));
 
-// DELETE /api/admin/visits/:id — eliminación permanente
-// Restringido al superadmin (SUPERADMIN_EMAIL). Cualquier otro admin recibe 403.
+// DELETE /api/admin/visits/:id — eliminación permanente (cualquier admin)
 router.delete('/visits/:id', ...isAdmin, ah(async (req, res) => {
-  if (req.user.email.toLowerCase() !== SUPERADMIN_EMAIL) {
-    return res.status(403).json({ error: 'Solo el superadministrador puede eliminar visitas' });
-  }
-
   const [[visita]] = await pool.query('SELECT id FROM visitas WHERE id = ?', [req.params.id]);
   if (!visita) return res.status(404).json({ error: 'Visita no encontrada' });
 

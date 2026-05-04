@@ -1,6 +1,5 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import api from '../../services/api';
-import { useAuth } from '../../context/AuthContext';
 import VisitModal from './VisitModal';
 import styles from './AdminVisits.module.css';
 
@@ -11,31 +10,40 @@ const ESTADO_STYLE = {
   anulada:   { bg: '#F3F4F6', color: '#6B7280' },
 };
 
-const SUPERADMIN_EMAIL = 'admin@formas-ia.com';
-
 export default function AdminVisits() {
-  const { user }                    = useAuth();
-  const isSuperAdmin                = user?.email?.toLowerCase() === SUPERADMIN_EMAIL;
   const [data, setData]             = useState({ data: [], total: 0 });
   const [page, setPage]             = useState(1);
   const [filters, setFilters]       = useState({ desde: '', hasta: '', estado: '', requiere_revision: '' });
+  const [busqueda, setBusqueda]     = useState('');
   const [loading, setLoading]       = useState(true);
   const [selectedId, setSelectedId] = useState(null);
-  const [sort, setSort]             = useState({ col: null, dir: 'desc' }); // default: fecha desc
+  const [sort, setSort]             = useState({ col: null, dir: 'desc' });
+  const debounceRef                 = useRef(null);
 
-  const load = (p = page, f = filters, s = sort) => {
+  const load = (p = page, f = filters, s = sort, q = busqueda) => {
     setLoading(true);
     const params = new URLSearchParams({
       page: p, limit: 20,
       ...Object.fromEntries(Object.entries(f).filter(([, v]) => v !== '')),
       ...(s.col ? { sort_by: s.col, sort_dir: s.dir } : {}),
+      ...(q.trim() ? { busqueda: q.trim() } : {}),
     });
     api.get(`/admin/visits?${params}`).then(r => setData(r.data)).finally(() => setLoading(false));
   };
 
   useEffect(() => { load(); }, []); // eslint-disable-line
 
-  const applyFilters = () => { setPage(1); load(1, filters, sort); };
+  // Debounce: buscar automáticamente 400 ms después de dejar de escribir
+  const handleBusqueda = (valor) => {
+    setBusqueda(valor);
+    clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      setPage(1);
+      load(1, filters, sort, valor);
+    }, 400);
+  };
+
+  const applyFilters = () => { setPage(1); load(1, filters, sort, busqueda); };
 
   const handleSort = (col) => {
     const newSort = {
@@ -86,6 +94,20 @@ export default function AdminVisits() {
 
   return (
     <div>
+      {/* Búsqueda rápida */}
+      <div className={styles.searchRow}>
+        <input
+          type="text"
+          className={styles.searchInput}
+          placeholder="🔍 Buscar por #ID, conjunto, ciudad, auditor, apto..."
+          value={busqueda}
+          onChange={e => handleBusqueda(e.target.value)}
+        />
+        {busqueda && (
+          <button className={styles.btnClearSearch} onClick={() => handleBusqueda('')}>✕</button>
+        )}
+      </div>
+
       {/* Filtros */}
       <div className={styles.filters}>
         <input type="date" value={filters.desde} onChange={e => setFilters(f => ({ ...f, desde: e.target.value }))} />
@@ -156,15 +178,13 @@ export default function AdminVisits() {
                         <button className={styles.btnVer} onClick={() => setSelectedId(v.id)}>
                           👁 Ver
                         </button>
-                        {isSuperAdmin && (
-                          <button
-                            className={styles.btnDelete}
-                            onClick={() => handleDelete(v.id, v.apartamento)}
-                            title="Eliminar visita permanentemente"
-                          >
-                            🗑
-                          </button>
-                        )}
+                        <button
+                          className={styles.btnDelete}
+                          onClick={() => handleDelete(v.id, v.apartamento)}
+                          title="Eliminar visita permanentemente"
+                        >
+                          🗑
+                        </button>
                       </td>
                     </tr>
                   );
