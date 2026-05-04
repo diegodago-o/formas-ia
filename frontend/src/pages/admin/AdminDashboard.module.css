@@ -5,6 +5,29 @@
   letter-spacing: 0.6px; color: var(--text-muted); margin-top: 4px;
 }
 
+/* ── Filtro de rango de fechas ─────────────────────── */
+.dateRow {
+  display: flex; align-items: center; gap: 12px;
+  background: var(--surface);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 12px 16px;
+  flex-wrap: wrap;
+}
+.dateLabel {
+  font-size: 0.8rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.5px; color: var(--text-muted); white-space: nowrap;
+}
+.datePickers { display: flex; align-items: center; gap: 8px; flex: 1; }
+.datePicker {
+  flex: 1; min-width: 120px;
+  font-size: 0.88rem; padding: 6px 10px;
+  border: 1px solid var(--border); border-radius: 6px;
+  background: var(--bg); color: var(--text);
+}
+.datePicker:focus { outline: 2px solid #1E3A5F; outline-offset: 1px; }
+.dateSep { color: var(--text-muted); font-size: 0.88rem; flex-shrink: 0; }
+
 /* ── Fila top: 3 métricas principales ─────────────────── */
 .topRow { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
 
@@ -48,7 +71,7 @@
 .estadoValue { font-size: 1.8rem; font-weight: 800; color: var(--estado-color); line-height: 1; }
 .estadoLabel { font-size: 0.76rem; color: var(--text-muted); font-weight: 600; }
 
-/* ── Por ciudad ────────────────────────────────────────── */
+/* ── Por ciudad → conjunto ─────────────────────────────── */
 .ciudadesTable {
   background: var(--surface);
   border-radius: var(--radius);
@@ -60,27 +83,59 @@
   font-size: 0.88rem; color: var(--text-muted);
 }
 
-.ciudadRow {
+/* Grupo completo por ciudad (header + sus conjuntos) */
+.ciudadGroup { border-bottom: 2px solid var(--border); }
+.ciudadGroup:last-child { border-bottom: none; }
+
+/* Cabecera ciudad */
+.ciudadHeader {
   display: grid;
-  grid-template-columns: 160px 1fr 48px 44px;
+  grid-template-columns: 160px 1fr 52px 44px;
   align-items: center;
   gap: 12px;
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--border);
+  padding: 12px 16px 10px;
+  background: #F8FAFC;
 }
-.ciudadRow:last-child { border-bottom: none; }
 
-.ciudadNombre { font-size: 0.88rem; font-weight: 600; color: var(--text); }
+.ciudadNombre { font-size: 0.88rem; font-weight: 700; color: var(--text); }
 .ciudadBar    { height: 8px; background: #E5E7EB; border-radius: 4px; overflow: hidden; }
 .ciudadBarFill { height: 100%; background: #1E3A5F; border-radius: 4px; transition: width 0.4s; }
 .ciudadTotal  { font-size: 0.88rem; font-weight: 700; color: var(--text); text-align: right; }
 .ciudadPct    { font-size: 0.78rem; color: var(--text-muted); text-align: right; }
+
+/* Fila por conjunto */
+.conjuntoRow {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 16px 7px 32px;
+  border-bottom: 1px solid var(--border);
+}
+.conjuntoRow:last-child { border-bottom: none; }
+
+.conjuntoNombre {
+  flex: 1; font-size: 0.82rem; color: var(--text-muted);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.conjuntoTotal {
+  font-size: 0.82rem; font-weight: 700; color: var(--text);
+  min-width: 32px; text-align: right; flex-shrink: 0;
+}
+.conjuntoBadge {
+  font-size: 0.75rem; font-weight: 600;
+  padding: 2px 8px; border-radius: 10px;
+  white-space: nowrap; flex-shrink: 0;
+}
+.badgeAprobada  { background: #D1FAE5; color: #065F46; }
+.badgeRechazada { background: #FEE2E2; color: #991B1B; }
 
 /* ── Responsive ─────────────────────────────────────────── */
 @media (max-width: 500px) {
   .topRow    { grid-template-columns: 1fr 1fr; }
   .topRow .metricCard:last-child { grid-column: span 2; }
   .estadosRow { grid-template-columns: 1fr 1fr; }
-  .ciudadRow  { grid-template-columns: 1fr auto auto; }
-  .ciudadBar  { display: none; }
+
+  .ciudadHeader { grid-template-columns: 1fr auto auto; }
+  .ciudadBar    { display: none; }
+
+  .conjuntoRow  { padding-left: 20px; gap: 6px; }
+  .conjuntoBadge { padding: 2px 5px; font-size: 0.7rem; }
 }

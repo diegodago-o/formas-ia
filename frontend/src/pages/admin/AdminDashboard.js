@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../../services/api';
 import styles from './AdminDashboard.module.css';
@@ -10,27 +10,74 @@ const ESTADO_META = {
   anulada:   { label: 'Anuladas',    icon: '🚫', color: '#6B7280', bg: '#F3F4F6' },
 };
 
+// Helpers de fecha
+const fmtISO = d => d.toISOString().split('T')[0];
+const hoy          = () => fmtISO(new Date());
+const primerDiaMes = () => { const d = new Date(); return fmtISO(new Date(d.getFullYear(), d.getMonth(), 1)); };
+
 export default function AdminDashboard() {
   const navigate = useNavigate();
+
   const [stats,   setStats]   = useState(null);
   const [loading, setLoading] = useState(true);
+  const [desde,   setDesde]   = useState(primerDiaMes);
+  const [hasta,   setHasta]   = useState(hoy);
 
   useEffect(() => {
-    api.get('/admin/stats')
+    setLoading(true);
+    api.get('/admin/stats', { params: { desde, hasta } })
       .then(r => setStats(r.data))
       .finally(() => setLoading(false));
-  }, []);
+  }, [desde, hasta]);
 
-  const s = stats;
+  // Agrupa el listado plano ciudad+conjunto en estructura jerárquica
+  const ciudadesAgrupadas = useMemo(() => {
+    if (!stats?.por_ciudad?.length) return [];
+    const map = {};
+    stats.por_ciudad.forEach(row => {
+      if (!map[row.ciudad]) {
+        map[row.ciudad] = { ciudad: row.ciudad, totalCiudad: 0, conjuntos: [] };
+      }
+      map[row.ciudad].totalCiudad += Number(row.total);
+      map[row.ciudad].conjuntos.push(row);
+    });
+    return Object.values(map).sort((a, b) => b.totalCiudad - a.totalCiudad);
+  }, [stats?.por_ciudad]);
+
+  const s         = stats;
+  const granTotal = Number(s?.total ?? 0);
 
   return (
     <div className={styles.root}>
+
+      {/* ── Filtro de rango de fechas ─────────────────── */}
+      <div className={styles.dateRow}>
+        <span className={styles.dateLabel}>Período</span>
+        <div className={styles.datePickers}>
+          <input
+            type="date"
+            className={styles.datePicker}
+            value={desde}
+            max={hasta}
+            onChange={e => setDesde(e.target.value)}
+          />
+          <span className={styles.dateSep}>—</span>
+          <input
+            type="date"
+            className={styles.datePicker}
+            value={hasta}
+            min={desde}
+            max={hoy()}
+            onChange={e => setHasta(e.target.value)}
+          />
+        </div>
+      </div>
 
       {/* ── Fila 1: métricas principales ─────────────── */}
       <div className={styles.topRow}>
         <button className={`${styles.metricCard} ${styles.total}`} onClick={() => navigate('/admin/visitas')}>
           <span className={styles.metricIcon}>📋</span>
-          <span className={styles.metricValue}>{loading ? '–' : s?.total ?? 0}</span>
+          <span className={styles.metricValue}>{loading ? '–' : granTotal}</span>
           <span className={styles.metricLabel}>Total visitas</span>
         </button>
 
@@ -64,24 +111,42 @@ export default function AdminDashboard() {
         ))}
       </div>
 
-      {/* ── Fila 3: visitas por ciudad ────────────────── */}
+      {/* ── Fila 3: visitas por ciudad → conjunto ─────── */}
       <div className={styles.sectionTitle}>Visitas por ciudad</div>
       <div className={styles.ciudadesTable}>
         {loading ? (
           <div className={styles.tableLoading}>Cargando...</div>
-        ) : !s?.por_ciudad?.length ? (
-          <div className={styles.tableEmpty}>Sin visitas registradas</div>
+        ) : !ciudadesAgrupadas.length ? (
+          <div className={styles.tableEmpty}>Sin visitas en el período seleccionado</div>
         ) : (
-          s.por_ciudad.map((c, i) => {
-            const pct = s.total > 0 ? Math.round((c.total / s.total) * 100) : 0;
+          ciudadesAgrupadas.map((grupo, gi) => {
+            const pct = granTotal > 0 ? Math.round((grupo.totalCiudad / granTotal) * 100) : 0;
             return (
-              <div key={i} className={styles.ciudadRow}>
-                <span className={styles.ciudadNombre}>🏙️ {c.ciudad}</span>
-                <div className={styles.ciudadBar}>
-                  <div className={styles.ciudadBarFill} style={{ width: `${pct}%` }} />
+              <div key={gi} className={styles.ciudadGroup}>
+
+                {/* Cabecera ciudad */}
+                <div className={styles.ciudadHeader}>
+                  <span className={styles.ciudadNombre}>🏙️ {grupo.ciudad}</span>
+                  <div className={styles.ciudadBar}>
+                    <div className={styles.ciudadBarFill} style={{ width: `${pct}%` }} />
+                  </div>
+                  <span className={styles.ciudadTotal}>{grupo.totalCiudad}</span>
+                  <span className={styles.ciudadPct}>{pct}%</span>
                 </div>
-                <span className={styles.ciudadTotal}>{c.total}</span>
-                <span className={styles.ciudadPct}>{pct}%</span>
+
+                {/* Filas de conjuntos */}
+                {grupo.conjuntos.map((c, ci) => (
+                  <div key={ci} className={styles.conjuntoRow}>
+                    <span className={styles.conjuntoNombre}>└ {c.conjunto}</span>
+                    <span className={styles.conjuntoTotal}>{c.total}</span>
+                    <span className={`${styles.conjuntoBadge} ${styles.badgeAprobada}`}>
+                      ✅ {c.aprobadas ?? 0}
+                    </span>
+                    <span className={`${styles.conjuntoBadge} ${styles.badgeRechazada}`}>
+                      ❌ {c.rechazadas ?? 0}
+                    </span>
+                  </div>
+                ))}
               </div>
             );
           })

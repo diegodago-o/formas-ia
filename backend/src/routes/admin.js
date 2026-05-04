@@ -13,7 +13,17 @@ const isAdmin = [authMiddleware, requireRole('admin')];
 const SUPERADMIN_EMAIL = (process.env.SUPERADMIN_EMAIL || 'admin@formas-ia.com').toLowerCase();
 
 // GET /api/admin/stats  — métricas para el dashboard
+// Query params: desde=YYYY-MM-DD, hasta=YYYY-MM-DD (ambos opcionales)
 router.get('/stats', ...isAdmin, ah(async (req, res) => {
+  const { desde, hasta } = req.query;
+
+  // WHERE reutilizable para ambas queries
+  const conds  = [];
+  const params = [];
+  if (desde) { conds.push('DATE(v.fecha) >= ?'); params.push(desde); }
+  if (hasta) { conds.push('DATE(v.fecha) <= ?'); params.push(hasta); }
+  const where = conds.length ? `WHERE ${conds.join(' AND ')}` : '';
+
   const [[estados]] = await pool.query(
     `SELECT
        COUNT(*)                                          AS total,
@@ -26,14 +36,26 @@ router.get('/stats', ...isAdmin, ah(async (req, res) => {
          WHERE m.visita_id = v.id AND m.requiere_revision = 1
        ) AND estado NOT IN ('rechazada','anulada','aprobada')) AS alertas_pendientes,
        SUM(estado IN ('aprobada','rechazada'))           AS revisadas
-     FROM visitas v`
+     FROM visitas v
+     ${where}`,
+    params
   );
 
+  // Desglose ciudad → conjunto con conteos por estado
   const [porCiudad] = await pool.query(
-    `SELECT ci.nombre AS ciudad, COUNT(*) AS total
-     FROM visitas v JOIN ciudades ci ON ci.id = v.ciudad_id
-     GROUP BY v.ciudad_id, ci.nombre
-     ORDER BY total DESC`
+    `SELECT
+       ci.nombre AS ciudad,
+       c.nombre  AS conjunto,
+       COUNT(*)                       AS total,
+       SUM(v.estado = 'aprobada')     AS aprobadas,
+       SUM(v.estado = 'rechazada')    AS rechazadas
+     FROM visitas v
+     JOIN ciudades  ci ON ci.id = v.ciudad_id
+     JOIN conjuntos c  ON c.id  = v.conjunto_id
+     ${where}
+     GROUP BY v.ciudad_id, ci.nombre, v.conjunto_id, c.nombre
+     ORDER BY ci.nombre ASC, total DESC`,
+    params
   );
 
   res.json({ ...estados, por_ciudad: porCiudad });
