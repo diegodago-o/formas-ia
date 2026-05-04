@@ -113,7 +113,7 @@ export default function AdminDashboard() {
         >
           <span className={styles.metricIcon}>📋</span>
           <span className={styles.metricValue}>{loading ? '–' : granTotal}</span>
-          <span className={styles.metricLabel}>Total visitas</span>
+          <span className={styles.metricLabel}>Total visitas (hogares)</span>
         </button>
 
         <button
@@ -133,7 +133,7 @@ export default function AdminDashboard() {
         >
           <span className={styles.metricIcon}>🔍</span>
           <span className={styles.metricValue}>{loading ? '–' : s?.revisadas ?? 0}</span>
-          <span className={styles.metricLabel}>Visitas revisadas</span>
+          <span className={styles.metricLabel}>Visitas revisadas (hogares)</span>
         </button>
       </div>
 
