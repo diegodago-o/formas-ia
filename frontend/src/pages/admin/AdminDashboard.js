@@ -12,23 +12,29 @@ const ESTADO_META = {
 
 // Helpers de fecha
 const fmtISO = d => d.toISOString().split('T')[0];
-const hoy          = () => fmtISO(new Date());
-const primerDiaMes = () => { const d = new Date(); return fmtISO(new Date(d.getFullYear(), d.getMonth(), 1)); };
+const hoy = () => fmtISO(new Date());
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
 
   const [stats,   setStats]   = useState(null);
   const [loading, setLoading] = useState(true);
-  const [desde,   setDesde]   = useState(primerDiaMes);
-  const [hasta,   setHasta]   = useState(hoy);
+  const [desde,   setDesde]   = useState(''); // vacío = sin filtro
+  const [hasta,   setHasta]   = useState(''); // vacío = sin filtro
+
+  const filtroActivo = desde || hasta;
 
   useEffect(() => {
     setLoading(true);
-    api.get('/admin/stats', { params: { desde, hasta } })
+    const params = {};
+    if (desde) params.desde = desde;
+    if (hasta) params.hasta = hasta;
+    api.get('/admin/stats', { params })
       .then(r => setStats(r.data))
       .finally(() => setLoading(false));
   }, [desde, hasta]);
+
+  const limpiarFiltro = () => { setDesde(''); setHasta(''); };
 
   // Agrupa el listado plano ciudad+conjunto en estructura jerárquica
   const ciudadesAgrupadas = useMemo(() => {
@@ -58,7 +64,7 @@ export default function AdminDashboard() {
             type="date"
             className={styles.datePicker}
             value={desde}
-            max={hasta}
+            max={hasta || hoy()}
             onChange={e => setDesde(e.target.value)}
           />
           <span className={styles.dateSep}>—</span>
@@ -66,11 +72,16 @@ export default function AdminDashboard() {
             type="date"
             className={styles.datePicker}
             value={hasta}
-            min={desde}
+            min={desde || undefined}
             max={hoy()}
             onChange={e => setHasta(e.target.value)}
           />
         </div>
+        {filtroActivo && (
+          <button className={styles.btnLimpiar} onClick={limpiarFiltro}>
+            ✕ Todo
+          </button>
+        )}
       </div>
 
       {/* ── Fila 1: métricas principales ─────────────── */}

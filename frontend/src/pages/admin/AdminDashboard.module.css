@@ -27,6 +27,14 @@
 }
 .datePicker:focus { outline: 2px solid #1E3A5F; outline-offset: 1px; }
 .dateSep { color: var(--text-muted); font-size: 0.88rem; flex-shrink: 0; }
+.btnLimpiar {
+  font-size: 0.78rem; font-weight: 700;
+  padding: 5px 12px; border-radius: 20px;
+  background: #FEE2E2; color: #991B1B;
+  border: none; cursor: pointer; white-space: nowrap; flex-shrink: 0;
+  transition: background 0.15s;
+}
+.btnLimpiar:hover { background: #FECACA; }
 
 /* ── Fila top: 3 métricas principales ─────────────────── */
 .topRow { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
