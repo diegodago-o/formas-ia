@@ -17,12 +17,17 @@ const hoy = () => fmtISO(new Date());
 export default function AdminDashboard() {
   const navigate = useNavigate();
 
-  const [stats,   setStats]   = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [desde,   setDesde]   = useState(''); // vacío = sin filtro
-  const [hasta,   setHasta]   = useState(''); // vacío = sin filtro
+  const [stats,        setStats]        = useState(null);
+  const [loading,      setLoading]      = useState(true);
+  // Valores pendientes (lo que el usuario escribe en los inputs)
+  const [pendingDesde, setPendingDesde] = useState('');
+  const [pendingHasta, setPendingHasta] = useState('');
+  // Valores aplicados (los que disparan la consulta al servidor)
+  const [desde,        setDesde]        = useState('');
+  const [hasta,        setHasta]        = useState('');
 
-  const filtroActivo = desde || hasta;
+  const filtroActivo  = desde || hasta;
+  const filtroPendiente = pendingDesde !== desde || pendingHasta !== hasta;
 
   useEffect(() => {
     setLoading(true);
@@ -34,7 +39,12 @@ export default function AdminDashboard() {
       .finally(() => setLoading(false));
   }, [desde, hasta]);
 
-  const limpiarFiltro = () => { setDesde(''); setHasta(''); };
+  const aplicarFiltro = () => { setDesde(pendingDesde); setHasta(pendingHasta); };
+
+  const limpiarFiltro = () => {
+    setPendingDesde(''); setPendingHasta('');
+    setDesde('');        setHasta('');
+  };
 
   // Agrupa el listado plano ciudad+conjunto en estructura jerárquica
   const ciudadesAgrupadas = useMemo(() => {
@@ -63,20 +73,27 @@ export default function AdminDashboard() {
           <input
             type="date"
             className={styles.datePicker}
-            value={desde}
-            max={hasta || hoy()}
-            onChange={e => setDesde(e.target.value)}
+            value={pendingDesde}
+            max={pendingHasta || hoy()}
+            onChange={e => setPendingDesde(e.target.value)}
           />
           <span className={styles.dateSep}>—</span>
           <input
             type="date"
             className={styles.datePicker}
-            value={hasta}
-            min={desde || undefined}
+            value={pendingHasta}
+            min={pendingDesde || undefined}
             max={hoy()}
-            onChange={e => setHasta(e.target.value)}
+            onChange={e => setPendingHasta(e.target.value)}
           />
         </div>
+        <button
+          className={styles.btnAplicar}
+          onClick={aplicarFiltro}
+          disabled={!filtroPendiente && !filtroActivo || (!pendingDesde && !pendingHasta)}
+        >
+          Aplicar
+        </button>
         {filtroActivo && (
           <button className={styles.btnLimpiar} onClick={limpiarFiltro}>
             ✕ Todo

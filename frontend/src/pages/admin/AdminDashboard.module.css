@@ -27,6 +27,16 @@
 }
 .datePicker:focus { outline: 2px solid #1E3A5F; outline-offset: 1px; }
 .dateSep { color: var(--text-muted); font-size: 0.88rem; flex-shrink: 0; }
+.btnAplicar {
+  font-size: 0.78rem; font-weight: 700;
+  padding: 5px 14px; border-radius: 20px;
+  background: #1E3A5F; color: #fff;
+  border: none; cursor: pointer; white-space: nowrap; flex-shrink: 0;
+  transition: background 0.15s, opacity 0.15s;
+}
+.btnAplicar:hover:not(:disabled) { background: #16304f; }
+.btnAplicar:disabled { opacity: 0.35; cursor: default; }
+
 .btnLimpiar {
   font-size: 0.78rem; font-weight: 700;
   padding: 5px 12px; border-radius: 20px;
