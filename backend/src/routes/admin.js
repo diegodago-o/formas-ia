@@ -111,7 +111,13 @@ router.get('/visits', ...isAdmin, ah(async (req, res) => {
 
   const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
   const [[{ total }]] = await pool.query(
-    `SELECT COUNT(*) AS total FROM visitas v ${where}`, params
+    `SELECT COUNT(*) AS total
+     FROM visitas v
+     JOIN ciudades ci ON ci.id = v.ciudad_id
+     JOIN conjuntos c  ON c.id  = v.conjunto_id
+     JOIN usuarios  u  ON u.id  = v.auditor_id
+     ${where}`,
+    params
   );
   const [rows] = await pool.query(
     `SELECT v.id, v.fecha, v.hora_inicio, v.hora_fin, v.apartamento, v.estado,
