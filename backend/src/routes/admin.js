@@ -230,9 +230,13 @@ router.patch('/visits/:id/estado', ...isAdmin, ah(async (req, res) => {
   res.json({ ok: true });
 }));
 
-// PATCH /api/admin/medidores/:id  — resolver hallazgo OCR de un medidor
+// PATCH /api/admin/medidores/:id  — resolver hallazgo OCR o sobrescribir estado de medidor
+// Acepta: lectura_confirmada, estado_revision_ocr, motivo_rechazo_admin
+// - Rechazo explícito  → la visita pasa a rechazada de inmediato (sin esperar otras alertas)
+// - Aprobación/corrección → la visita se cierra solo cuando no queden alertas pendientes
+// - Funciona sobre cualquier visita que no esté anulada (incluso ya aprobadas/rechazadas)
 router.patch('/medidores/:id', ...isAdmin, ah(async (req, res) => {
-  const { lectura_confirmada, estado_revision_ocr } = req.body;
+  const { lectura_confirmada, estado_revision_ocr, motivo_rechazo_admin } = req.body;
 
   const estadosValidos = ['aprobado', 'rechazado', 'corregido'];
   if (!lectura_confirmada && !estado_revision_ocr) {
@@ -242,37 +246,41 @@ router.patch('/medidores/:id', ...isAdmin, ah(async (req, res) => {
     return res.status(400).json({ error: 'estado_revision_ocr inválido' });
   }
 
+  // Al aprobar/corregir se limpia el motivo de rechazo previo del medidor
+  const motivoMedidor = estado_revision_ocr === 'rechazado'
+    ? (motivo_rechazo_admin || null)
+    : null;
+
   await pool.query(
     `UPDATE medidores
-     SET lectura_confirmada  = COALESCE(?, lectura_confirmada),
-         estado_revision_ocr = COALESCE(?, estado_revision_ocr),
-         requiere_revision   = 0,
-         revisado_por        = ?,
-         revisado_en         = NOW()
+     SET lectura_confirmada   = COALESCE(?, lectura_confirmada),
+         estado_revision_ocr  = COALESCE(?, estado_revision_ocr),
+         motivo_rechazo_admin = ?,
+         requiere_revision    = 0,
+         revisado_por         = ?,
+         revisado_en          = NOW()
      WHERE id = ?`,
-    [lectura_confirmada || null, estado_revision_ocr || null, req.user.id, req.params.id]
+    [lectura_confirmada || null, estado_revision_ocr || null, motivoMedidor, req.user.id, req.params.id]
   );
 
-  // ── Auto-aprobación / rechazo de la visita ────────────────────
-  // Cuando todos los medidores de una visita dejan de tener requiere_revision=1,
-  // la visita se cierra automáticamente según el resultado de cada medidor.
+  // ── Re-evaluación del estado de la visita ─────────────────────
   const [[med]] = await pool.query('SELECT visita_id FROM medidores WHERE id = ?', [req.params.id]);
   if (med) {
     const { visita_id } = med;
+    const [[visita]] = await pool.query('SELECT id, estado FROM visitas WHERE id = ?', [visita_id]);
 
-    // ¿Quedan medidores pendientes de revisión?
-    const [[{ pendientes }]] = await pool.query(
-      'SELECT COUNT(*) AS pendientes FROM medidores WHERE visita_id = ? AND requiere_revision = 1',
-      [visita_id]
-    );
+    if (visita && visita.estado !== 'anulada') {
+      // Rechazo explícito → re-evaluar de inmediato aunque queden otras alertas pendientes
+      // Aprobación/corrección → re-evaluar solo cuando ya no queden alertas pendientes
+      const [[{ pendientes }]] = await pool.query(
+        'SELECT COUNT(*) AS pendientes FROM medidores WHERE visita_id = ? AND requiere_revision = 1',
+        [visita_id]
+      );
+      const debeEvaluar = estado_revision_ocr === 'rechazado' || pendientes === 0;
 
-    if (pendientes === 0) {
-      // Solo actuar si la visita sigue en estado 'pendiente'
-      const [[visita]] = await pool.query('SELECT id, estado FROM visitas WHERE id = ?', [visita_id]);
-
-      if (visita && visita.estado === 'pendiente') {
+      if (debeEvaluar) {
         const [medidores] = await pool.query(
-          'SELECT tipo, estado_revision_ocr FROM medidores WHERE visita_id = ?',
+          'SELECT tipo, estado_revision_ocr, motivo_rechazo_admin FROM medidores WHERE visita_id = ?',
           [visita_id]
         );
 
@@ -280,9 +288,12 @@ router.patch('/medidores/:id', ...isAdmin, ah(async (req, res) => {
         let nuevoEstado, motivoRechazo = null;
 
         if (rechazados.length > 0) {
-          nuevoEstado  = 'rechazada';
-          const tipos  = rechazados.map(m => m.tipo).join(', ');
-          motivoRechazo = `Medidor(es) rechazado(s) automáticamente: ${tipos}`;
+          nuevoEstado   = 'rechazada';
+          // Motivo construido desde cada medidor rechazado con su razón individual
+          motivoRechazo = rechazados.map(m => {
+            const label = m.tipo.charAt(0).toUpperCase() + m.tipo.slice(1);
+            return m.motivo_rechazo_admin ? `${label}: ${m.motivo_rechazo_admin}` : label;
+          }).join('. ');
         } else {
           nuevoEstado = 'aprobada';
         }

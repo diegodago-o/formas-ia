@@ -38,6 +38,13 @@ export default function VisitModal({ visitId, onClose, onUpdated }) {
   const [error, setError]       = useState('');
   const [lightbox, setLightbox] = useState(null);
 
+  // ── Override de medidor (edición admin sobre cualquier visita no anulada) ──
+  const [editMedId, setEditMedId]         = useState(null);
+  const [editMedForm, setEditMedForm]     = useState({ estado: 'aprobado', lectura: '', motivo: '' });
+  const [editMedSaving, setEditMedSaving] = useState(false);
+  const [editMedError, setEditMedError]   = useState('');
+  const [visitaBanner, setVisitaBanner]   = useState('');
+
   // ── Edición de ubicación ───────────────────────────────────────────────────
   const [editingUbic, setEditingUbic]   = useState(false);
   const [ubicForm, setUbicForm]         = useState({ ciudad_id: '', conjunto_id: '', torre_id: '', apartamento: '' });
@@ -116,6 +123,55 @@ export default function VisitModal({ visitId, onClose, onUpdated }) {
     }
   };
 
+  // Abre el form de edición pre-rellenado con el estado actual del medidor
+  const openEditMed = (m) => {
+    setEditMedId(m.id);
+    setEditMedForm({
+      estado:  m.estado_revision_ocr || 'aprobado',
+      lectura: m.lectura_confirmada  || '',
+      motivo:  '',
+    });
+    setEditMedError('');
+  };
+
+  // Guarda el override del medidor y re-evalúa la visita en el backend
+  const saveMedidorOverride = async (medidorId) => {
+    if (editMedForm.estado === 'rechazado' && !editMedForm.motivo.trim()) {
+      setEditMedError('El motivo de rechazo es obligatorio');
+      return;
+    }
+    setEditMedSaving(true);
+    setEditMedError('');
+    try {
+      const payload = {
+        estado_revision_ocr: editMedForm.estado,
+        ...(editMedForm.lectura.trim()
+          ? { lectura_confirmada: editMedForm.lectura.trim() }
+          : {}),
+        ...(editMedForm.estado === 'rechazado' && editMedForm.motivo.trim()
+          ? { motivo_rechazo_admin: editMedForm.motivo.trim() }
+          : {}),
+      };
+      const { data } = await api.patch(`/admin/medidores/${medidorId}`, payload);
+      setEditMedId(null);
+      if (data.visita_auto) {
+        const label = data.visita_auto.estado === 'aprobada'
+          ? '✓ La visita fue aprobada automáticamente'
+          : '✕ La visita pasó a rechazada';
+        setVisitaBanner(label);
+        setTimeout(() => setVisitaBanner(''), 5000);
+      }
+      // Recargar visita y refrescar lista
+      const r = await api.get(`/admin/visits/${visitId}`);
+      setVisit(r.data);
+      if (onUpdated) onUpdated();
+    } catch (e) {
+      setEditMedError(e.response?.data?.error || 'Error al guardar');
+    } finally {
+      setEditMedSaving(false);
+    }
+  };
+
   useEffect(() => {
     api.get(`/admin/visits/${visitId}`)
       .then(r => setVisit(r.data))
@@ -155,6 +211,13 @@ export default function VisitModal({ visitId, onClose, onUpdated }) {
           ? <div className={styles.loading}>Cargando...</div>
           : visit && (
             <div className={styles.body}>
+
+              {/* Banner de cambio de estado de visita */}
+              {visitaBanner && (
+                <div className={`${styles.visitaBanner} ${visitaBanner.startsWith('✓') ? styles.bannerAprobada : styles.bannerRechazada}`}>
+                  {visitaBanner}
+                </div>
+              )}
 
               {/* Info general */}
               <div className={styles.section}>
@@ -344,6 +407,16 @@ export default function VisitModal({ visitId, onClose, onUpdated }) {
                                 IA {m.confianza_ocr}
                               </span>
                             )}
+                            {/* Botón de edición — disponible siempre que haya medidor y la visita no esté anulada */}
+                            {m && visit.estado !== 'anulada' && (
+                              <button
+                                className={styles.btnEditMed}
+                                onClick={() => editMedId === m.id ? setEditMedId(null) : openEditMed(m)}
+                                title="Editar estado de la lectura"
+                              >
+                                ✏️
+                              </button>
+                            )}
                           </div>
                         </div>
 
@@ -358,8 +431,70 @@ export default function VisitModal({ visitId, onClose, onUpdated }) {
                         {revisionTag && (
                           <div className={`${styles.revisionTag} ${styles[`revision_${revisionTag}`]}`}>
                             {revisionTag === 'aprobado'  && '✓ Lectura aprobada'}
-                            {revisionTag === 'rechazado' && '✕ Lectura rechazada'}
+                            {revisionTag === 'rechazado' && (
+                              <>
+                                <span>✕ Lectura rechazada</span>
+                                {m.motivo_rechazo_admin && (
+                                  <span className={styles.motivoRechazoAdmin}> — {m.motivo_rechazo_admin}</span>
+                                )}
+                              </>
+                            )}
                             {revisionTag === 'corregido' && '✏️ Lectura corregida por administrador'}
+                          </div>
+                        )}
+
+                        {/* Form inline de override — se abre al hacer clic en ✏️ */}
+                        {editMedId === m?.id && (
+                          <div className={styles.editMedForm}>
+                            <div className={styles.editMedRow}>
+                              <label>Estado</label>
+                              <select
+                                value={editMedForm.estado}
+                                onChange={e => setEditMedForm(f => ({ ...f, estado: e.target.value }))}
+                              >
+                                <option value="aprobado">✓ Aprobado</option>
+                                <option value="rechazado">✕ Rechazado</option>
+                                <option value="corregido">✏️ Corregido</option>
+                              </select>
+                            </div>
+                            <div className={styles.editMedRow}>
+                              <label>Lectura (opcional)</label>
+                              <input
+                                type="text"
+                                value={editMedForm.lectura}
+                                onChange={e => setEditMedForm(f => ({ ...f, lectura: e.target.value }))}
+                                placeholder="Corregir lectura si es necesario"
+                              />
+                            </div>
+                            {editMedForm.estado === 'rechazado' && (
+                              <div className={styles.editMedRow}>
+                                <label>Motivo del rechazo *</label>
+                                <textarea
+                                  value={editMedForm.motivo}
+                                  onChange={e => setEditMedForm(f => ({ ...f, motivo: e.target.value }))}
+                                  placeholder="Ej: Foto tomada en kVAR, debe ser kWh"
+                                  rows={2}
+                                  autoFocus
+                                />
+                              </div>
+                            )}
+                            {editMedError && <p className={styles.editMedErrorMsg}>{editMedError}</p>}
+                            <div className={styles.editMedActions}>
+                              <button
+                                className={styles.btnSaveEditMed}
+                                onClick={() => saveMedidorOverride(m.id)}
+                                disabled={editMedSaving}
+                              >
+                                {editMedSaving ? 'Guardando...' : '✓ Guardar'}
+                              </button>
+                              <button
+                                className={styles.btnCancelEditMed}
+                                onClick={() => { setEditMedId(null); setEditMedError(''); }}
+                                disabled={editMedSaving}
+                              >
+                                Cancelar
+                              </button>
+                            </div>
                           </div>
                         )}
 

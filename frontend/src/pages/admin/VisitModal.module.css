@@ -469,3 +469,102 @@
   color: var(--text-muted);
   cursor: pointer;
 }
+
+/* ── Override de medidor ─────────────────────────────────────────── */
+.btnEditMed {
+  background: transparent;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 2px 8px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: background 0.15s;
+  flex-shrink: 0;
+}
+.btnEditMed:hover { background: var(--bg); }
+
+.editMedForm {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 14px;
+  margin: 8px 0 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.editMedRow {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.editMedRow label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+.editMedRow select,
+.editMedRow input,
+.editMedRow textarea {
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  font-size: 0.9rem;
+  background: var(--surface);
+  color: var(--text);
+  outline: none;
+  font-family: inherit;
+  resize: vertical;
+}
+.editMedRow select:focus,
+.editMedRow input:focus,
+.editMedRow textarea:focus { border-color: var(--accent); }
+
+.editMedErrorMsg {
+  color: var(--danger);
+  font-size: 0.82rem;
+  margin: 0;
+}
+
+.editMedActions { display: flex; gap: 8px; }
+
+.btnSaveEditMed {
+  background: var(--accent);
+  color: #fff;
+  border-radius: var(--radius-sm);
+  padding: 9px 18px;
+  font-size: 0.88rem;
+  font-weight: 600;
+  transition: opacity 0.15s;
+}
+.btnSaveEditMed:disabled { opacity: 0.55; cursor: not-allowed; }
+
+.btnCancelEditMed {
+  background: transparent;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 9px 14px;
+  font-size: 0.88rem;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.motivoRechazoAdmin {
+  font-size: 0.82rem;
+  font-weight: 400;
+  opacity: 0.85;
+}
+
+/* ── Banner de cambio de estado de visita ────────────────────────── */
+.visitaBanner {
+  border-radius: var(--radius-sm);
+  padding: 12px 16px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  text-align: center;
+}
+.bannerAprobada  { background: #D1FAE5; color: #065F46; }
+.bannerRechazada { background: #FEE2E2; color: #991B1B; }
