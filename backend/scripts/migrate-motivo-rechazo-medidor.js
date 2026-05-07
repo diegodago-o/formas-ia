@@ -3,7 +3,7 @@
  * Ejecutar una sola vez en el servidor:
  *   node backend/scripts/migrate-motivo-rechazo-medidor.js
  */
-require('dotenv').config({ path: require('path').join(__dirname, '../../.env') });
+require('dotenv').config({ path: require('path').join(__dirname, '../.env') });
 const { pool } = require('../src/models/db');
 
 async function migrate() {
