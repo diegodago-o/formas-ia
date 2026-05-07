@@ -419,10 +419,10 @@ export default function AuditorVisitModal({ visitId, autoAnular, onClose, onUpda
                             <span className={styles.subsanarBadge}>Rechazado</span>
                           </div>
 
-                          {/* Motivo */}
-                          {m.nota_ocr && (
+                          {/* Motivo (prioridad: razón del admin, luego OCR) */}
+                          {(m.motivo_rechazo_admin || m.nota_ocr) && (
                             <div className={styles.subsanarMotivo}>
-                              💬 {m.nota_ocr}
+                              💬 {m.motivo_rechazo_admin || m.nota_ocr}
                             </div>
                           )}
 
@@ -458,7 +458,7 @@ export default function AuditorVisitModal({ visitId, autoAnular, onClose, onUpda
                             <input
                               type="file"
                               accept="image/*"
-                              capture="environment"
+                              {...(('ontouchstart' in window || navigator.maxTouchPoints > 0) ? { capture: 'environment' } : {})}
                               style={{ display: 'none' }}
                               disabled={datos.uploading}
                               onChange={e => e.target.files[0] && handleFotoChange(m.id, e.target.files[0])}

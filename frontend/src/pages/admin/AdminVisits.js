@@ -215,6 +215,7 @@ export default function AdminVisits() {
           visitId={selectedId}
           onClose={() => setSelectedId(null)}
           onUpdated={() => { setSelectedId(null); load(); }}
+          onListRefresh={() => load()}
         />
       )}
     </div>

@@ -29,7 +29,7 @@ const CONF_STYLE = {
   baja:  { bg: '#FEE2E2', color: '#991B1B' },
 };
 
-export default function VisitModal({ visitId, onClose, onUpdated }) {
+export default function VisitModal({ visitId, onClose, onUpdated, onListRefresh }) {
   const [visit, setVisit]       = useState(null);
   const [loading, setLoading]   = useState(true);
   const [action, setAction]     = useState(null);
@@ -161,10 +161,10 @@ export default function VisitModal({ visitId, onClose, onUpdated }) {
         setVisitaBanner(label);
         setTimeout(() => setVisitaBanner(''), 5000);
       }
-      // Recargar visita y refrescar lista
+      // Recargar visita y refrescar la lista en background (sin cerrar el modal)
       const r = await api.get(`/admin/visits/${visitId}`);
       setVisit(r.data);
-      if (onUpdated) onUpdated();
+      if (onListRefresh) onListRefresh();
     } catch (e) {
       setEditMedError(e.response?.data?.error || 'Error al guardar');
     } finally {
