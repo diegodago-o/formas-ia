@@ -85,14 +85,39 @@ const ESTADO_COLOR = {
 const CONF_COLOR = { alta: 'FFD1FAE5', baja: 'FFFEE2E2' };
 
 // ── GET /api/reports/excel ────────────────────────────────────
+// Acepta los mismos filtros que GET /admin/visits para que el Excel
+// exporte exactamente lo que está visible en la tabla.
 router.get('/excel', authMiddleware, requireRole('admin'), ah(async (req, res) => {
-  const { desde, hasta, ciudad_id, conjunto_id } = req.query;
+  const { desde, hasta, ciudad_id, conjunto_id, estado,
+          requiere_revision, busqueda } = req.query;
   const conditions = [];
   const params     = [];
+
   if (desde)       { conditions.push('DATE(v.fecha) >= ?'); params.push(desde); }
   if (hasta)       { conditions.push('DATE(v.fecha) <= ?'); params.push(hasta); }
-  if (ciudad_id)   { conditions.push('v.ciudad_id = ?');   params.push(ciudad_id); }
-  if (conjunto_id) { conditions.push('v.conjunto_id = ?'); params.push(conjunto_id); }
+  if (ciudad_id)   { conditions.push('v.ciudad_id = ?');    params.push(ciudad_id); }
+  if (conjunto_id) { conditions.push('v.conjunto_id = ?');  params.push(conjunto_id); }
+  if (estado)      { conditions.push('v.estado = ?');       params.push(estado); }
+
+  if (busqueda?.trim()) {
+    const term = busqueda.trim();
+    if (/^\d+$/.test(term)) {
+      conditions.push('v.id = ?');
+      params.push(parseInt(term, 10));
+    } else {
+      const q = `%${term}%`;
+      conditions.push('(c.nombre LIKE ? OR ci.nombre LIKE ? OR u.nombre LIKE ? OR v.apartamento LIKE ?)');
+      params.push(q, q, q, q);
+    }
+  }
+
+  if (requiere_revision === '1') {
+    conditions.push('EXISTS (SELECT 1 FROM medidores m WHERE m.visita_id = v.id AND m.requiere_revision = 1)');
+  }
+  if (requiere_revision === '0') {
+    conditions.push('NOT EXISTS (SELECT 1 FROM medidores m WHERE m.visita_id = v.id AND m.requiere_revision = 1)');
+  }
+
   const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
 
   const [visitas] = await pool.query(

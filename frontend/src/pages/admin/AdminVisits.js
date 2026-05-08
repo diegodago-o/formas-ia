@@ -76,7 +76,10 @@ export default function AdminVisits() {
   };
 
   const downloadExcel = async () => {
-    const params = new URLSearchParams(Object.fromEntries(Object.entries(filters).filter(([, v]) => v !== '')));
+    // Pasa exactamente los mismos filtros activos en la tabla (incluyendo búsqueda de texto)
+    const activeFilters = Object.fromEntries(Object.entries(filters).filter(([, v]) => v !== ''));
+    if (busqueda.trim()) activeFilters.busqueda = busqueda.trim();
+    const params = new URLSearchParams(activeFilters);
     const resp = await api.get(`/reports/excel?${params}`, { responseType: 'blob' });
     const url  = URL.createObjectURL(resp.data);
     const a    = document.createElement('a');
