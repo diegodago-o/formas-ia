@@ -108,6 +108,9 @@ export async function syncPendingVisits(onProgress) {
           hora_fin:             visit.hora_fin      || null,
           // Momento real de sincronización — diferente a hora_fin para visitas offline
           hora_sincronizacion:  new Date().toISOString(),
+          // Clave idempotente: evita crear visita duplicada si el sync se ejecuta
+          // más de una vez (ej. red cortada a mitad del POST, retry offline).
+          client_ref:           visit.localId,
         };
 
         await api.post('/visits', body);

@@ -2,6 +2,7 @@ node_modules/
 .env
 backend/uploads/*
 !backend/uploads/.gitkeep
+backend/uploads/_deleted/**
 dist/
 build/
 *.log

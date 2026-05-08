@@ -172,17 +172,34 @@ router.post('/', authMiddleware, ah(async (req, res) => {
       latitud, longitud, ciudad_id, conjunto_id, torre_id,
       apartamento, observaciones, medidores: medidoresBody = {},
       hora_inicio, hora_fin, hora_sincronizacion,
+      // Clave idempotente generada por syncService (= localId de IndexedDB).
+      // Si ya existe una visita con este client_ref del mismo auditor
+      // devolvemos esa visita en lugar de crear un duplicado.
+      client_ref,
     } = req.body;
 
     if (!ciudad_id || !conjunto_id || !apartamento) {
       return res.status(400).json({ error: 'ciudad_id, conjunto_id y apartamento son obligatorios' });
     }
 
+    // ── Idempotencia: evitar duplicados en retry de sync offline ──────────
+    if (client_ref) {
+      const [[existing]] = await conn.query(
+        'SELECT id FROM visitas WHERE client_ref = ? AND auditor_id = ? LIMIT 1',
+        [client_ref, req.user.id]
+      );
+      if (existing) {
+        await conn.commit();
+        // 200 (no 201) para que el cliente sepa que ya existía
+        return res.status(200).json({ id: existing.id, message: 'Visita ya registrada', duplicate: true });
+      }
+    }
+
     const [visitResult] = await conn.query(
       `INSERT INTO visitas
         (auditor_id, latitud, longitud, ciudad_id, conjunto_id, torre_id, apartamento, observaciones,
-         hora_inicio, hora_fin, hora_sincronizacion)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         hora_inicio, hora_fin, hora_sincronizacion, client_ref)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         req.user.id,
         latitud || null, longitud || null,
@@ -195,6 +212,7 @@ router.post('/', authMiddleware, ah(async (req, res) => {
         // Online: hora_sincronizacion no viene → usar NOW() del servidor
         // Offline: viene del syncService → momento real de sincronización
         hora_sincronizacion   ? new Date(hora_sincronizacion)   : new Date(),
+        client_ref            ? String(client_ref)              : null,
       ]
     );
     const visitaId = visitResult.insertId;

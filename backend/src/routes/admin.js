@@ -2,6 +2,21 @@ const router = require('express').Router();
 const fs     = require('fs');
 const path   = require('path');
 const bcrypt = require('bcryptjs');
+
+// ── Mover archivo a papelera organizada por visita ───────────────────────────
+// Estructura: uploads/_deleted/visita_{id}/{filename.jpg}
+// Facilita recuperar evidencias de una visita eliminada específica.
+function moverAPapelera(uploadsDir, visita_id, foto_path) {
+  if (!foto_path) return;
+  const src      = path.join(uploadsDir, foto_path);
+  const trashDir = path.join(uploadsDir, '_deleted', `visita_${visita_id}`);
+  try {
+    if (!fs.existsSync(src)) return;
+    if (!fs.existsSync(trashDir)) fs.mkdirSync(trashDir, { recursive: true });
+    const dest = path.join(trashDir, path.basename(foto_path));
+    fs.renameSync(src, dest);
+  } catch {}
+}
 const { pool } = require('../models/db');
 const { authMiddleware, requireRole } = require('../middleware/auth');
 const ah = require('../middleware/asyncHandler');
@@ -395,13 +410,9 @@ router.delete('/visits/:id', ...isAdmin, ah(async (req, res) => {
   await pool.query('DELETE FROM medidores WHERE visita_id = ?', [req.params.id]);
   await pool.query('DELETE FROM visitas  WHERE id = ?',         [req.params.id]);
 
-  // Limpiar fotos del filesystem (en background, sin bloquear la respuesta)
+  // Mover fotos a papelera (_deleted/visita_{id}/) en lugar de borrar permanentemente
   const uploadsDir = path.join(__dirname, '..', '..', process.env.UPLOADS_DIR || 'uploads');
-  medidores.forEach(m => {
-    if (m.foto_path) {
-      fs.unlink(path.join(uploadsDir, m.foto_path), () => {});
-    }
-  });
+  medidores.forEach(m => moverAPapelera(uploadsDir, req.params.id, m.foto_path));
 
   res.json({ ok: true });
 }));
