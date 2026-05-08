@@ -436,13 +436,14 @@ export default function NewVisit() {
       const m = medidores[tipo];
       if (m.foto_path || m.lectura || m.sin_acceso || m.foto_file || m.foto_base64) {
         acc[tipo] = {
-          foto_path:         m.foto_path         || null,
-          foto_file:         m.foto_file         || null,
-          foto_base64:       m.foto_base64       || null,
+          // Si hay sin_acceso no se guarda foto (limpia cualquier captura previa del mismo paso)
+          foto_path:         m.sin_acceso ? null : (m.foto_path  || null),
+          foto_file:         m.sin_acceso ? null : (m.foto_file  || null),
+          foto_base64:       m.sin_acceso ? null : (m.foto_base64 || null),
           lectura:           m.lectura           || null,
           sin_acceso:        m.sin_acceso        || false,
           motivo_sin_acceso: m.motivo_sin_acceso || null,
-          hora_foto:         m.hora_foto         || null,
+          hora_foto:         m.sin_acceso ? null : (m.hora_foto  || null),
         };
       }
       return acc;
@@ -525,11 +526,11 @@ export default function NewVisit() {
         for (const [tipo, m] of Object.entries(medidoresPayload)) {
           if (!m) continue;
           medidoresParaServidor[tipo] = {
-            foto_path:         m.foto_path         || null,
+            foto_path:         m.sin_acceso ? null : (m.foto_path || null),
             lectura:           m.lectura           || null,
             sin_acceso:        m.sin_acceso        || false,
             motivo_sin_acceso: m.motivo_sin_acceso || null,
-            hora_foto:         m.hora_foto         || null,
+            hora_foto:         m.sin_acceso ? null : (m.hora_foto || null),
           };
         }
         await api.post('/visits', {

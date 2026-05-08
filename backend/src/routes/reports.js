@@ -228,7 +228,9 @@ router.get('/excel', authMiddleware, requireRole('admin'), ah(async (req, res) =
   // ── FILAS DE DATOS ────────────────────────────────────────
   visitas.forEach((v, i) => {
     const med     = medidoresMap[v.id] || {};
-    const fotoUrl = (t) => med[t]?.foto_path ? `${BASE_URL}/uploads/${med[t].foto_path}` : '';
+    // No mostrar foto si el medidor está marcado como sin_acceso (consistente con la web)
+    const fotoUrl = (t) => (!med[t]?.sin_acceso && med[t]?.foto_path)
+      ? `${BASE_URL}/uploads/${med[t].foto_path}` : '';
     const fotoVal = (t) => fotoUrl(t) ? { text: 'Ver foto', hyperlink: fotoUrl(t) } : '';
     const tieneAlerta = !!(
       med.luz?.requiere_revision  ||
