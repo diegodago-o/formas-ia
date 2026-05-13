@@ -21,13 +21,27 @@ import {
 
 let syncing = false;
 
-export async function syncPendingVisits(onProgress) {
-  if (syncing || !navigator.onLine) return;
+// isOnline: resultado del ping real (useOnlineStatus). Si no se pasa, fallback a navigator.onLine.
+export async function syncPendingVisits(onProgress, isOnline) {
+  const reachable = typeof isOnline === 'boolean' ? isOnline : navigator.onLine;
+  if (syncing || !reachable) return;
   syncing = true;
 
   try {
     const pending = await getPendingVisits();
-    const toSync  = pending.filter(v => v.status !== 'syncing');
+
+    // Resetear entradas atascadas en 'syncing' — son restos de un sync interrumpido
+    // (crash, red cortada después del updatePendingVisit pero antes de completar).
+    // Es seguro resetearlas porque si hubiera un sync activo este bloque no ejecutaría
+    // (el flag de módulo `syncing` ya habría bloqueado la entrada).
+    for (const v of pending) {
+      if (v.status === 'syncing') {
+        await updatePendingVisit(v.localId, { status: 'pending' });
+        v.status = 'pending';
+      }
+    }
+
+    const toSync = pending.filter(v => v.status !== 'syncing'); // ya ninguna tiene 'syncing'
 
     for (const visit of toSync) {
       try {
@@ -138,13 +152,23 @@ export async function syncPendingVisits(onProgress) {
  */
 let syncingSubs = false;
 
-export async function syncPendingSubsanaciones(onProgress) {
-  if (syncingSubs || !navigator.onLine) return;
+export async function syncPendingSubsanaciones(onProgress, isOnline) {
+  const reachable = typeof isOnline === 'boolean' ? isOnline : navigator.onLine;
+  if (syncingSubs || !reachable) return;
   syncingSubs = true;
 
   try {
     const pending = await getPendingSubsanaciones();
-    const toSync  = pending.filter(s => s.status !== 'syncing');
+
+    // Resetear subsanaciones atascadas en 'syncing' (mismo razonamiento que en syncPendingVisits)
+    for (const s of pending) {
+      if (s.status === 'syncing') {
+        await updatePendingSubsanacion(s.localId, { status: 'pending' });
+        s.status = 'pending';
+      }
+    }
+
+    const toSync = pending.filter(s => s.status !== 'syncing');
 
     for (const sub of toSync) {
       try {

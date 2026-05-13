@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import useOnlineStatus from '../hooks/useOnlineStatus';
 import styles from './Layout.module.css';
+import { version } from '../../package.json';
 
 export default function Layout({ children, title, back }) {
   const { user, logout } = useAuth();
@@ -39,7 +40,7 @@ export default function Layout({ children, title, back }) {
       <main className={styles.main}>{children}</main>
 
       {/* Footer */}
-      <footer className={styles.footer}>Desarrollado por Tecnofactory SAS</footer>
+      <footer className={styles.footer}>Tecnofactory SAS · v{version}</footer>
 
       {/* Bottom nav (solo auditor) */}
       {user?.rol === 'auditor' && (

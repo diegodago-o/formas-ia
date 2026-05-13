@@ -95,8 +95,10 @@ export default function MyVisits() {
   const handleSync = async () => {
     if (syncing || !online) return;
     setSyncing(true);
-    await syncPendingVisits();
-    await syncPendingSubsanaciones(); // también sincroniza subsanaciones offline
+    // Pasar `online` (ping real) para que el sync no confíe en navigator.onLine,
+    // que puede ser true en zonas rurales con WiFi pero sin acceso a internet.
+    await syncPendingVisits(undefined, online);
+    await syncPendingSubsanaciones(undefined, online);
     await load();
     setSyncing(false);
   };
@@ -119,13 +121,13 @@ export default function MyVisits() {
     }
   }, [loading]); // eslint-disable-line
 
-  // Auto-retry: si hay visitas con error y tenemos conexión, reintentar en 30 s.
-  // Cubre el caso donde el primer intento falló pero el dispositivo YA estaba online
-  // (no hay nuevo evento 'online' que vuelva a disparar el sync automático).
+  // Auto-retry: si hay visitas con error O atascadas en 'syncing' (crash previo) y tenemos
+  // conexión, reintentar en 30 s. El fix en syncService resetea los 'syncing' al inicio
+  // de cada run, así que el retry los rescatará.
   useEffect(() => {
     clearTimeout(retryTimerRef.current);
-    const errorVisits = pending.filter(v => v.status === 'error');
-    if (errorVisits.length === 0 || !online || syncing) return;
+    const stuckVisits = pending.filter(v => v.status === 'error' || v.status === 'syncing');
+    if (stuckVisits.length === 0 || !online || syncing) return;
     retryTimerRef.current = setTimeout(() => {
       handleSyncRef.current?.();
     }, 30_000);

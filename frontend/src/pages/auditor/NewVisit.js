@@ -216,42 +216,51 @@ export default function NewVisit() {
     }
   };
 
-  // ── Auto-guardado del borrador ─────────────────────────────────────
+  // ── Ref con el payload más reciente del borrador ──────────────────────────
+  // Permite saves de emergencia (foto capturada, app yendo al fondo) sin
+  // closures estale ni tener que re-leer todo el estado.
+  const draftPayloadRef = useRef(null);
+
+  // ── Auto-guardado del borrador ─────────────────────────────────────────
   // Se dispara cuando cambia cualquier dato relevante y hay un draft activo.
-  // Debounce de 800ms para no saturar IndexedDB.
+  // Debounce de 800ms para cambios de texto; fotos se guardan inmediatamente
+  // en handleMedidorFile (ver abajo).
   useEffect(() => {
     if (!currentDraftId) return;
 
+    // Quitar solo preview (blob URL no sobrevive IDB).
+    // foto_file (File/Blob) SÍ es serializable en IDB — no lo eliminamos.
+    const medidoresForSave = {};
+    for (const tipo of ['luz', 'agua', 'gas']) {
+      medidoresForSave[tipo] = { ...medidores[tipo], preview: null };
+    }
+
+    const conjuntoNombre =
+      conjuntos.find(c => String(c.id) === String(conjuntoId))?.nombre ||
+      allConjuntos.find(c => String(c.id) === String(conjuntoId))?.nombre || '';
+    const torreNombre =
+      torres.find(t => String(t.id) === String(torreId))?.nombre ||
+      allTorres.find(t => String(t.id) === String(torreId))?.nombre || '';
+
+    const payload = {
+      ciudadId, conjuntoId, torreId, apartamento,
+      latitud, longitud, gpsMode,
+      observaciones,
+      medidores: medidoresForSave,
+      _meta: {
+        ciudadNombre: ciudades.find(c => String(c.id) === String(ciudadId))?.nombre || '',
+        conjuntoNombre,
+        torreNombre,
+      },
+    };
+
+    // Siempre mantener el ref fresco — lo usan los saves de emergencia
+    draftPayloadRef.current = payload;
+
     clearTimeout(autoSaveTimer.current);
     autoSaveTimer.current = setTimeout(async () => {
-      try {
-        // Quitar solo preview (blob URL no sobrevive IDB).
-        // foto_file (File/Blob) SÍ es serializable en IDB — no lo eliminamos.
-        const medidoresForSave = {};
-        for (const tipo of ['luz', 'agua', 'gas']) {
-          medidoresForSave[tipo] = { ...medidores[tipo], preview: null };
-        }
-
-        // Intentar obtener nombres desde arrays cargados, fallback al catálogo global
-        const conjuntoNombre =
-          conjuntos.find(c => String(c.id) === String(conjuntoId))?.nombre ||
-          allConjuntos.find(c => String(c.id) === String(conjuntoId))?.nombre || '';
-        const torreNombre =
-          torres.find(t => String(t.id) === String(torreId))?.nombre ||
-          allTorres.find(t => String(t.id) === String(torreId))?.nombre || '';
-
-        await updateDraft(currentDraftId, {
-          ciudadId, conjuntoId, torreId, apartamento,
-          latitud, longitud, gpsMode,
-          observaciones,
-          medidores: medidoresForSave,
-          _meta: {
-            ciudadNombre:   ciudades.find(c => String(c.id) === String(ciudadId))?.nombre || '',
-            conjuntoNombre,
-            torreNombre,
-          },
-        });
-      } catch { /* fallo silencioso — el borrador se guardó antes */ }
+      try { await updateDraft(currentDraftId, payload); }
+      catch { /* fallo silencioso — el borrador se guardó antes */ }
     }, 800);
 
     return () => clearTimeout(autoSaveTimer.current);
@@ -261,6 +270,20 @@ export default function NewVisit() {
     latitud, longitud, gpsMode,
     medidores, observaciones,
   ]);
+
+  // ── Guardar borrador al ir al fondo ────────────────────────────────────
+  // iOS Safari (y algunos Android) puede matar la PWA al cambiar de app.
+  // visibilitychange dispara ANTES de que el proceso sea eliminado.
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.hidden && currentDraftId && draftPayloadRef.current) {
+        // Fire-and-forget — no podemos await en un listener síncrono
+        updateDraft(currentDraftId, draftPayloadRef.current).catch(() => {});
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  }, [currentDraftId]); // eslint-disable-line
 
   // Scroll al top en cada cambio de paso
   useEffect(() => { window.scrollTo({ top: 0, behavior: 'instant' }); }, [step]);
@@ -319,7 +342,24 @@ export default function NewVisit() {
         reader.readAsDataURL(file);
       });
     } catch { /* base64 queda null, se usará foto_file como fallback */ }
+
     setMedidores(prev => ({ ...prev, [tipo]: { ...prev[tipo], foto_file: file, foto_base64: base64 } }));
+
+    // ── Guardado inmediato al recibir foto ─────────────────────────────
+    // La foto es el dato más crítico. No esperamos el debounce de 800ms:
+    // si el SO mata la app antes de que dispare, la foto se perdería.
+    if (currentDraftId && draftPayloadRef.current) {
+      const prev = draftPayloadRef.current;
+      const updatedPayload = {
+        ...prev,
+        medidores: {
+          ...prev.medidores,
+          [tipo]: { ...prev.medidores[tipo], foto_file: file, foto_base64: base64, preview: null },
+        },
+      };
+      draftPayloadRef.current = updatedPayload; // mantener ref fresco para saves posteriores
+      updateDraft(currentDraftId, updatedPayload).catch(() => {});
+    }
   };
 
   // Estado de cada medidor
