@@ -277,6 +277,9 @@ export default function AdminAlerts() {
                       const discrep    = tipo === 'discrepancia';
                       const isEditing  = editing === a.medidor_id;
                       const isExiting  = exitingIds.has(a.medidor_id);
+                      // Diferencia numérica > 15%: bloquear aprobación rápida
+                      const diffPct    = a.ocr_diff_pct ? parseFloat(a.ocr_diff_pct) : null;
+                      const diffAlta   = discrep && diffPct !== null && diffPct > 15;
 
                       return (
                         <div
@@ -364,12 +367,26 @@ export default function AdminAlerts() {
                           {!sinDet && !sinAcceso && !noEsMed && (
                             <div className={styles.lecturas}>
                               {discrep && (
-                                <div className={`${styles.alertBox} ${styles.alertBoxAmbar}`}>
-                                  <p className={styles.alertBoxTitle}>
-                                    La IA y el auditor registraron valores diferentes
-                                  </p>
-                                  <p className={styles.alertBoxDesc}>Verifica la foto y confirma el valor correcto.</p>
-                                </div>
+                                diffAlta ? (
+                                  <div className={`${styles.alertBox} ${styles.alertBoxRojo}`}>
+                                    <p className={styles.alertBoxTitle}>
+                                      🚨 Diferencia del <strong>{diffPct.toFixed(1)}%</strong> — Corrección muy alta
+                                    </p>
+                                    <p className={styles.alertBoxDesc}>
+                                      La diferencia entre lo que detectó la IA y lo que registró el auditor supera el 15%.
+                                      <br/>
+                                      <strong>Revisa la foto con cuidado</strong> y verifica que el medidor fotografiado
+                                      corresponda al apartamento. Debes ingresar la lectura correcta manualmente.
+                                    </p>
+                                  </div>
+                                ) : (
+                                  <div className={`${styles.alertBox} ${styles.alertBoxAmbar}`}>
+                                    <p className={styles.alertBoxTitle}>
+                                      La IA y el auditor registraron valores diferentes
+                                    </p>
+                                    <p className={styles.alertBoxDesc}>Verifica la foto y confirma el valor correcto.</p>
+                                  </div>
+                                )
                               )}
                               <div className={styles.lecturaGrid}>
                                 <div className={styles.lecturaItem}>
@@ -483,18 +500,22 @@ export default function AdminAlerts() {
                               {/* Discrepancia */}
                               {discrep && (
                                 <>
+                                  {/* Diferencia baja (≤15%): se puede confirmar con un clic */}
+                                  {!diffAlta && (
+                                    <button
+                                      className={styles.btnConfirmar}
+                                      onClick={() => resolver(a.medidor_id, 'aprobado', a.lectura_confirmada)}
+                                      disabled={saving}
+                                    >
+                                      ✓ Confirmar auditor
+                                    </button>
+                                  )}
+                                  {/* Diferencia alta (>15%): OBLIGA a verificar manualmente */}
                                   <button
-                                    className={styles.btnConfirmar}
-                                    onClick={() => resolver(a.medidor_id, 'aprobado', a.lectura_confirmada)}
-                                    disabled={saving}
-                                  >
-                                    ✓ Confirmar auditor
-                                  </button>
-                                  <button
-                                    className={styles.btnCorregir}
+                                    className={diffAlta ? styles.btnCorregirAlta : styles.btnCorregir}
                                     onClick={() => { setEditing(a.medidor_id); setNewVal(a.lectura_confirmada || a.lectura_ocr || ''); }}
                                   >
-                                    ✏️ Corregir
+                                    {diffAlta ? '🔍 Verificar y confirmar lectura' : '✏️ Corregir'}
                                   </button>
                                   <button
                                     className={styles.btnRechazar}
