@@ -77,6 +77,27 @@ async function checkAutoCloseVisita(visita_id, userId) {
     );
     if (pendientes > 0) return;
 
+    // ── Red de seguridad: detectar medidores con diferencia OCR alta (> 15%)
+    // que hayan quedado con requiere_revision = 0 por cualquier razón.
+    // En ese caso los re-flagueamos y NO aprobamos automáticamente.
+    const [diffAltos] = await pool.query(
+      `SELECT id, tipo FROM medidores
+       WHERE visita_id = ? AND ocr_diff_pct > 15 AND requiere_revision = 0`,
+      [visita_id]
+    );
+    if (diffAltos.length > 0) {
+      const ids = diffAltos.map(m => m.id);
+      await pool.query(
+        `UPDATE medidores SET requiere_revision = 1, estado_revision_ocr = 'pendiente'
+         WHERE id IN (?)`,
+        [ids]
+      );
+      logger.warn(
+        `checkAutoCloseVisita: visita ${visita_id} bloqueada por diff OCR alta en medidores [${ids.join(', ')}]`
+      );
+      return; // dejar la visita en pendiente para revisión admin
+    }
+
     const [[visita]] = await pool.query('SELECT id, estado FROM visitas WHERE id = ?', [visita_id]);
     if (!visita || visita.estado !== 'pendiente') return;
 
