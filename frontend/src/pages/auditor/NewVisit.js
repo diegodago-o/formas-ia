@@ -331,35 +331,50 @@ export default function NewVisit() {
     setMedidores(prev => ({ ...prev, [tipo]: { ...prev[tipo], [field]: value } }));
   };
 
-  const handleMedidorFile = async (tipo, file) => {
-    // Convertir a base64 de inmediato para que sobreviva el IDB entre sesiones
-    let base64 = null;
-    try {
-      base64 = await new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload  = () => resolve(reader.result);
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
-    } catch { /* base64 queda null, se usará foto_file como fallback */ }
+  // Ref que rastrea la operación async de foto en curso.
+  // handleSaveDraft lo espera para no guardar el borrador con foto_file/base64 aún null.
+  const pendingPhotoSaveRef = useRef(null);
 
-    setMedidores(prev => ({ ...prev, [tipo]: { ...prev[tipo], foto_file: file, foto_base64: base64 } }));
+  const handleMedidorFile = (tipo, file) => {
+    // ── Crear la Promise ANTES de cualquier await ──────────────────────
+    // Si el auditor pulsa "Guardar y volver" mientras el base64 aún se computa,
+    // handleSaveDraft puede detectar la operación en curso y esperarla.
+    const operation = (async () => {
+      let base64 = null;
+      try {
+        base64 = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload  = () => resolve(reader.result);
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        });
+      } catch { /* base64 queda null, se usará foto_file como fallback */ }
 
-    // ── Guardado inmediato al recibir foto ─────────────────────────────
-    // La foto es el dato más crítico. No esperamos el debounce de 800ms:
-    // si el SO mata la app antes de que dispare, la foto se perdería.
-    if (currentDraftId && draftPayloadRef.current) {
-      const prev = draftPayloadRef.current;
-      const updatedPayload = {
-        ...prev,
-        medidores: {
-          ...prev.medidores,
-          [tipo]: { ...prev.medidores[tipo], foto_file: file, foto_base64: base64, preview: null },
-        },
-      };
-      draftPayloadRef.current = updatedPayload; // mantener ref fresco para saves posteriores
-      updateDraft(currentDraftId, updatedPayload).catch(() => {});
-    }
+      setMedidores(prev => ({ ...prev, [tipo]: { ...prev[tipo], foto_file: file, foto_base64: base64 } }));
+
+      // ── Guardado inmediato en IDB ──────────────────────────────────────
+      // No esperar el debounce de 800ms para que la foto persista incluso si
+      // el SO mata la app antes de que el auto-save dispare.
+      if (currentDraftId && draftPayloadRef.current) {
+        const prevPayload = draftPayloadRef.current;
+        const updatedPayload = {
+          ...prevPayload,
+          medidores: {
+            ...prevPayload.medidores,
+            [tipo]: { ...prevPayload.medidores[tipo], foto_file: file, foto_base64: base64, preview: null },
+          },
+        };
+        draftPayloadRef.current = updatedPayload;
+        await updateDraft(currentDraftId, updatedPayload).catch(() => {});
+      }
+    })();
+
+    // Registrar en ref INMEDIATAMENTE (antes del primer await de la op)
+    pendingPhotoSaveRef.current = operation;
+    operation.finally(() => {
+      // Limpiar solo si este sigue siendo el save pendiente activo
+      if (pendingPhotoSaveRef.current === operation) pendingPhotoSaveRef.current = null;
+    });
   };
 
   // Estado de cada medidor
@@ -432,30 +447,44 @@ export default function NewVisit() {
   // ── Guardar progreso y salir (vuelve a Mis Visitas) ───────────────
   const handleSaveDraft = async () => {
     clearTimeout(autoSaveTimer.current);
+
+    // Esperar a que termine el guardado de foto si está en curso.
+    // Sin esto, si el auditor toma una foto y pulsa "Guardar" inmediatamente
+    // (~400 ms de conversión base64), el draft se graba con foto_file/base64=null
+    // y la foto desaparece al reabrir el borrador.
+    if (pendingPhotoSaveRef.current) {
+      await pendingPhotoSaveRef.current;
+    }
+
     if (currentDraftId) {
-      const medidoresForSave = {};
-      for (const tipo of ['luz', 'agua', 'gas']) {
-        // Solo quitar preview (blob URL efímero); foto_file (File/Blob) sí persiste en IDB.
-        medidoresForSave[tipo] = { ...medidores[tipo], preview: null };
+      // draftPayloadRef.current ya refleja los datos más recientes — incluyendo las
+      // fotos que acaba de resolver pendingPhotoSaveRef. Úsalo como fuente de verdad.
+      if (draftPayloadRef.current) {
+        await updateDraft(currentDraftId, draftPayloadRef.current).catch(() => {});
+      } else {
+        // Fallback: construir payload desde estado (ruta de primera vez sin ref listo)
+        const medidoresForSave = {};
+        for (const tipo of ['luz', 'agua', 'gas']) {
+          medidoresForSave[tipo] = { ...medidores[tipo], preview: null };
+        }
+        const conjuntoNombreGuard =
+          conjuntos.find(c => String(c.id) === String(conjuntoId))?.nombre ||
+          allConjuntos.find(c => String(c.id) === String(conjuntoId))?.nombre || '';
+        const torreNombreGuard =
+          torres.find(t => String(t.id) === String(torreId))?.nombre ||
+          allTorres.find(t => String(t.id) === String(torreId))?.nombre || '';
+        await updateDraft(currentDraftId, {
+          ciudadId, conjuntoId, torreId, apartamento,
+          latitud, longitud, gpsMode,
+          observaciones,
+          medidores: medidoresForSave,
+          _meta: {
+            ciudadNombre:   ciudades.find(c => String(c.id) === String(ciudadId))?.nombre || '',
+            conjuntoNombre: conjuntoNombreGuard,
+            torreNombre:    torreNombreGuard,
+          },
+        }).catch(() => {});
       }
-      const conjuntoNombreGuard =
-        conjuntos.find(c => String(c.id) === String(conjuntoId))?.nombre ||
-        allConjuntos.find(c => String(c.id) === String(conjuntoId))?.nombre || '';
-      const torreNombreGuard =
-        torres.find(t => String(t.id) === String(torreId))?.nombre ||
-        allTorres.find(t => String(t.id) === String(torreId))?.nombre || '';
-      // Await para que IDB termine de escribir antes de navegar
-      await updateDraft(currentDraftId, {
-        ciudadId, conjuntoId, torreId, apartamento,
-        latitud, longitud, gpsMode,
-        observaciones,
-        medidores: medidoresForSave,
-        _meta: {
-          ciudadNombre:   ciudades.find(c => String(c.id) === String(ciudadId))?.nombre || '',
-          conjuntoNombre: conjuntoNombreGuard,
-          torreNombre:    torreNombreGuard,
-        },
-      }).catch(() => {});
     }
     navigate('/mis-visitas');
   };
