@@ -130,6 +130,10 @@ router.get('/visits', ...isAdmin, ah(async (req, res) => {
   if (requiere_revision === '0') {
     conditions.push('NOT EXISTS (SELECT 1 FROM medidores m WHERE m.visita_id = v.id AND m.requiere_revision = 1)');
   }
+  if (requiere_revision === 'diff_alta') {
+    // Visitas con al menos un medidor cuya diferencia OCR-auditor supera el 15%
+    conditions.push('EXISTS (SELECT 1 FROM medidores m WHERE m.visita_id = v.id AND m.ocr_diff_pct > 15)');
+  }
 
   const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
   const [[{ total }]] = await pool.query(
@@ -145,7 +149,8 @@ router.get('/visits', ...isAdmin, ah(async (req, res) => {
     `SELECT v.id, v.fecha, v.hora_inicio, v.hora_fin, v.apartamento, v.estado,
             ci.nombre AS ciudad, c.nombre AS conjunto, t.nombre AS torre,
             u.nombre AS auditor,
-            (SELECT COUNT(*) FROM medidores m WHERE m.visita_id = v.id AND m.requiere_revision = 1) AS alertas_ocr
+            (SELECT COUNT(*) FROM medidores m WHERE m.visita_id = v.id AND m.requiere_revision = 1) AS alertas_ocr,
+            (SELECT COUNT(*) FROM medidores m WHERE m.visita_id = v.id AND m.ocr_diff_pct > 15)    AS alertas_diff_alta
      FROM visitas v
      JOIN ciudades ci ON ci.id = v.ciudad_id
      JOIN conjuntos c ON c.id = v.conjunto_id

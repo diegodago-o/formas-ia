@@ -149,6 +149,14 @@
   font-size: 0.8rem;
   font-weight: 600;
 }
+.badgeDiffAlta {
+  background: #FEE2E2;
+  color: #991B1B;
+  border-radius: 6px;
+  padding: 3px 8px;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
 .ok { color: var(--success); font-weight: 700; }
 
 .pagination {

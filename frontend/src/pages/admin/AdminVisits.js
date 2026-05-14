@@ -136,6 +136,7 @@ export default function AdminVisits() {
           <option value="">Todas</option>
           <option value="1">Con alertas OCR</option>
           <option value="0">Sin alertas OCR</option>
+          <option value="diff_alta">🚨 Corrección OCR alta</option>
         </select>
         <button className={styles.btnFilter} onClick={applyFilters}>Filtrar</button>
         <button className={styles.btnExcel} onClick={downloadExcel}>📥 Excel</button>
@@ -183,7 +184,9 @@ export default function AdminVisits() {
                         </span>
                       </td>
                       <td>
-                        {v.alertas_ocr > 0
+                        {v.alertas_diff_alta > 0
+                          ? <span className={styles.badgeDiffAlta}>🚨 {v.alertas_diff_alta}</span>
+                          : v.alertas_ocr > 0
                           ? <span className={styles.badge}>{v.alertas_ocr} ⚠️</span>
                           : <span className={styles.ok}>✓</span>}
                       </td>

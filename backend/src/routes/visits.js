@@ -50,8 +50,20 @@ router.post(
 );
 
 // ─────────────────────────────────────────────
-// OCR asíncrono post-guardado
+// Diferencia numérica porcentual entre dos lecturas
+// Retorna null si alguna no es parseable.
+// Ej: diferenciaNumerica("80337.3", "8173.13") → 89.83
 // ─────────────────────────────────────────────
+function diferenciaNumerica(str1, str2) {
+  if (!str1 || !str2) return null;
+  const n1 = parseFloat(String(str1).replace(',', '.'));
+  const n2 = parseFloat(String(str2).replace(',', '.'));
+  if (isNaN(n1) || isNaN(n2)) return null;
+  const maxVal = Math.max(Math.abs(n1), Math.abs(n2));
+  if (maxVal === 0) return 0;
+  return Math.round(Math.abs(n1 - n2) / maxVal * 10000) / 100; // 2 decimales
+}
+
 // ─────────────────────────────────────────────
 // Auto-cierre compartido (subsanar + admin)
 // Cierra la visita automáticamente cuando todos
@@ -114,19 +126,22 @@ async function runOcrForMedidor(medidorId, absoluteFotoPath, tipo, lecturaAudito
     const flagCalidad    = result.calidad_foto === 'mala';
     const flagNoMedidor  = result.es_medidor === false;
     const lecturaAuditorNorm = lecturaAuditor ? lecturaAuditor.replace(',', '.') : lecturaAuditor;
-    // Discrepancia REAL: dígitos difieren Y la IA tiene ALTA confianza en su lectura.
-    //
-    // Con confianza='baja' el OCR mismo es incierto → el auditor que vio
-    // físicamente el medidor tiene mayor autoridad → NO generar alerta.
-    // Con confianza='alta': IA segura + dígitos distintos → revisar.
-    //
-    // Además se ignora el separador decimal (. vs ,) y diferencias en
-    // cantidad de decimales: "0082.405" y "0082,4" son el mismo medidor.
-    const flagDiscrep    = !!(
-      result.lectura &&
-      lecturaAuditorNorm &&
-      !coincidenciaDigitos(result.lectura, lecturaAuditorNorm) &&
-      result.confianza === 'alta'
+
+    // Diferencia porcentual numérica entre lo que leyó la IA y lo que registró el auditor.
+    // Se guarda en BD para que el admin pueda filtrar y para mostrar advertencia visual.
+    const diffPct = diferenciaNumerica(result.lectura, lecturaAuditorNorm);
+
+    // Discrepancia ampliada — dos criterios, basta con uno:
+    // A) Comportamiento original: dígitos distintos + IA con confianza alta
+    //    (separador decimal y cantidad de decimales se ignoran).
+    // B) NUEVO: diferencia numérica > 15% independientemente de la confianza OCR.
+    //    Captura casos como 80337.3 vs 8173.13 (≈90%) donde el auditor
+    //    físicamente leyó un número muy diferente al que detectó la IA.
+    const flagDiscrep = !!(
+      result.lectura && lecturaAuditorNorm && (
+        (!coincidenciaDigitos(result.lectura, lecturaAuditorNorm) && result.confianza === 'alta') ||
+        (diffPct !== null && diffPct > 15)
+      )
     );
     const flagSinLectura = !result.lectura && !lecturaAuditor && !flagAcceso;
 
@@ -139,13 +154,14 @@ async function runOcrForMedidor(medidorId, absoluteFotoPath, tipo, lecturaAudito
       `UPDATE medidores SET
          lectura_ocr    = ?, confianza_ocr  = ?, calidad_foto   = ?,
          motivo_calidad = ?, nota_ocr       = ?, es_medidor     = ?,
-         requiere_revision = ?
+         requiere_revision = ?, ocr_diff_pct = ?
        WHERE id = ?`,
       [
         result.lectura || null, result.confianza, result.calidad_foto,
         result.motivo_calidad || null, result.nota || null,
         result.es_medidor ? 1 : 0,
         requiereRevision,
+        diffPct,
         medidorId,
       ]
     );

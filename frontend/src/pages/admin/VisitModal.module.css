@@ -568,3 +568,32 @@
 }
 .bannerAprobada  { background: #D1FAE5; color: #065F46; }
 .bannerRechazada { background: #FEE2E2; color: #991B1B; }
+
+/* ── Corrección OCR alta (diferencia > 15%) ─────────────────────── */
+/* Borde naranja en la card del medidor aunque ya esté aprobada */
+.medCardDiffAlta { border-color: #FB923C; box-shadow: 0 0 0 2px #FED7AA; }
+
+/* Banner rojo dentro del discrepanciaBox */
+.diffAltaBanner {
+  background: #FEF2F2;
+  color: #991B1B;
+  font-size: 0.82rem;
+  font-weight: 700;
+  padding: 6px 8px;
+  border-radius: 4px;
+  border: 1px solid #FCA5A5;
+  margin-bottom: 4px;
+  line-height: 1.4;
+}
+
+/* Advertencia en el form de edición del medidor */
+.editMedDiffWarning {
+  background: #FEF3C7;
+  color: #92400E;
+  font-size: 0.82rem;
+  font-weight: 600;
+  padding: 9px 11px;
+  border-radius: var(--radius-sm);
+  border: 1px solid #FCD34D;
+  line-height: 1.4;
+}

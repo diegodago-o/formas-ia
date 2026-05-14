@@ -372,21 +372,30 @@ export default function VisitModal({ visitId, onClose, onUpdated, onListRefresh 
 
                     // Banner: hallazgo pendiente o tag de resolución
                     const estadoRevision = m?.estado_revision_ocr;
+                    const diffPct = m?.ocr_diff_pct ? parseFloat(m.ocr_diff_pct) : null;
+                    const hayDiffAlta = hayDiscrepancia && diffPct !== null && diffPct > 15;
+
                     const hallazgo = m?.requiere_revision ? (() => {
-                      if (sinEvidencia)             return { icon: '🚫', msg: 'Sin evidencia — auditor no pudo acceder' };
-                      if (m.es_medidor === 0)       return { icon: '🚫', msg: 'La IA detectó que la foto no es un medidor' };
-                      if (hayDiscrepancia)          return { icon: '⚠️', msg: `Discrepancia: IA detectó ${m.lectura_ocr} pero el auditor registró ${m.lectura_confirmada}` };
-                      if (!m.lectura_confirmada)    return { icon: '📸', msg: 'La IA no pudo leer el número del medidor' };
-                      if (deltaAnomalo)             return { icon: '📉', msg: delta < 0 ? 'Lectura inferior a la visita anterior' : 'Sin variación respecto a la visita anterior' };
+                      if (sinEvidencia)          return { icon: '🚫', msg: 'Sin evidencia — auditor no pudo acceder' };
+                      if (m.es_medidor === 0)    return { icon: '🚫', msg: 'La IA detectó que la foto no es un medidor' };
+                      if (hayDiscrepancia) {
+                        const pctLabel = hayDiffAlta ? ` — diferencia del ${diffPct.toFixed(1)}%` : '';
+                        const icon = hayDiffAlta ? '🚨' : '⚠️';
+                        return { icon, msg: `Discrepancia${pctLabel}: IA detectó ${m.lectura_ocr}, auditor registró ${m.lectura_confirmada}` };
+                      }
+                      if (!m.lectura_confirmada) return { icon: '📸', msg: 'La IA no pudo leer el número del medidor' };
+                      if (deltaAnomalo)          return { icon: '📉', msg: delta < 0 ? 'Lectura inferior a la visita anterior' : 'Sin variación respecto a la visita anterior' };
                       if (m.calidad_foto === 'mala') return { icon: '📷', msg: 'Foto de mala calidad' };
                       return { icon: '⚠️', msg: 'Requiere revisión' };
                     })() : null;
                     const revisionTag = !m?.requiere_revision && estadoRevision && estadoRevision !== 'pendiente'
                       ? estadoRevision : null;
 
+                    // Card con borde naranja si la corrección fue alta aunque ya esté aprobada
                     const cardExtra = m?.requiere_revision
                       ? styles.medCardAlerta
                       : estadoRevision === 'rechazado' ? styles.medCardRechazado
+                      : hayDiffAlta && estadoRevision === 'aprobado' ? styles.medCardDiffAlta
                       : estadoRevision === 'aprobado'  ? styles.medCardAprobado
                       : estadoRevision === 'corregido' ? styles.medCardCorregido
                       : '';
@@ -446,6 +455,13 @@ export default function VisitModal({ visitId, onClose, onUpdated, onListRefresh 
                         {/* Form inline de override — se abre al hacer clic en ✏️ */}
                         {editMedId === m?.id && (
                           <div className={styles.editMedForm}>
+                            {/* Advertencia de corrección alta al abrir el form */}
+                            {hayDiffAlta && (
+                              <div className={styles.editMedDiffWarning}>
+                                ⚠️ Esta corrección tiene una diferencia del <strong>{diffPct.toFixed(1)}%</strong> respecto a la IA.
+                                Confirma que el medidor fotografiado corresponde al apartamento antes de aprobar.
+                              </div>
+                            )}
                             <div className={styles.editMedRow}>
                               <label>Estado</label>
                               <select
@@ -551,6 +567,11 @@ export default function VisitModal({ visitId, onClose, onUpdated, onListRefresh 
 
                               {hayDiscrepancia ? (
                                 <div className={styles.discrepanciaBox}>
+                                  {hayDiffAlta && (
+                                    <div className={styles.diffAltaBanner}>
+                                      🚨 Diferencia del <strong>{diffPct.toFixed(1)}%</strong> — Verifica que el apartamento y medidor sean correctos
+                                    </div>
+                                  )}
                                   <div><label>IA detectó:</label> <code>{m.lectura_ocr}</code></div>
                                   <div><label>Auditor corrigió a:</label> <strong className={styles.lecturaVal}>{m.lectura_confirmada}</strong></div>
                                 </div>
