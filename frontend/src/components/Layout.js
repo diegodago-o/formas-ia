@@ -3,7 +3,8 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import useOnlineStatus from '../hooks/useOnlineStatus';
 import styles from './Layout.module.css';
-import { version } from '../../package.json';
+import pkg from '../../package.json';
+const { version } = pkg;
 
 export default function Layout({ children, title, back }) {
   const { user, logout } = useAuth();
