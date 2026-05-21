@@ -50,29 +50,30 @@ const SECCIONES = [
   ['MEDIDOR DE ELECTRICIDAD (kWh)',     14,  23, 'FF78350F', 'FF92400E'],
   ['MEDIDOR DE AGUA (m³)',              24,  33, 'FF1E3A8A', 'FF1D4ED8'],
   ['MEDIDOR DE GAS (m³)',               34,  43, 'FF7F1D1D', 'FF991B1B'],
-  ['REVISIÓN Y ESTADO',                 44,  47, 'FF1F2937', 'FF374151'],
+  ['REVISIÓN Y ESTADO',                 44,  49, 'FF1F2937', 'FF374151'],
 ];
 
 // Índice sección por columna (para fila 2)
 const seccionDeColumna = (col) => SECCIONES.find(([, f, t]) => col >= f && col <= t);
 
-// Encabezados de columna (fila 2) — 46 columnas
+// Encabezados de columna (fila 2) — 49 columnas
 const COL_HEADERS = [
   // IDENTIFICACIÓN (1-13)
   '#', 'Fecha y Hora', 'Hora Inicio', 'Hora Fin', 'Hora Sync', 'Duración',
   'Auditor', 'Ciudad', 'Conjunto', 'Torre', 'Apartamento',
   'Latitud', 'Longitud',
-  // LUZ (13-22)
+  // LUZ (14-23)
   'Lectura kWh', 'Ant. kWh', 'Consumo Δ', 'Lectura OCR',
   'Confianza IA', 'Sin Acceso', 'Motivo', 'Fecha Foto', 'Hora Foto', 'Foto',
-  // AGUA (23-32)
+  // AGUA (24-33)
   'Lectura m³', 'Ant. m³', 'Consumo Δ', 'Lectura OCR',
   'Confianza IA', 'Sin Acceso', 'Motivo', 'Fecha Foto', 'Hora Foto', 'Foto',
-  // GAS (33-42)
+  // GAS (34-43)
   'Lectura m³', 'Ant. m³', 'Consumo Δ', 'Lectura OCR',
   'Confianza IA', 'Sin Acceso', 'Motivo', 'Fecha Foto', 'Hora Foto', 'Foto',
-  // REVISIÓN (43-46)
+  // REVISIÓN (44-49)
   'Estado', 'Alerta OCR', 'Observaciones', 'Mot. Rechazo',
+  'Revisado por', 'Fecha revisión',
 ];
 
 // ── Colores de datos ──────────────────────────────────────────
@@ -123,7 +124,9 @@ router.get('/excel', authMiddleware, requireRole('admin'), ah(async (req, res) =
   const [visitas] = await pool.query(
     `SELECT v.id, v.fecha, v.hora_inicio, v.hora_fin, v.hora_sincronizacion,
             v.apartamento, v.observaciones, v.latitud, v.longitud,
-            v.estado, v.motivo_rechazo,
+            v.estado, v.motivo_rechazo, v.revisado_en,
+            CASE WHEN v.revisado_por = v.auditor_id THEN 'Auto-aprobada (IA)'
+                 ELSE ur.nombre END AS revisor,
             ci.nombre AS ciudad, c.nombre AS conjunto,
             t.nombre AS torre, u.nombre AS auditor
      FROM visitas v
@@ -131,6 +134,7 @@ router.get('/excel', authMiddleware, requireRole('admin'), ah(async (req, res) =
      JOIN conjuntos c  ON c.id  = v.conjunto_id
      LEFT JOIN torres t ON t.id = v.torre_id
      JOIN usuarios u ON u.id = v.auditor_id
+     LEFT JOIN usuarios ur ON ur.id = v.revisado_por
      ${where}
      ORDER BY v.fecha DESC`,
     params
@@ -212,11 +216,13 @@ router.get('/excel', authMiddleware, requireRole('admin'), ah(async (req, res) =
     { key: 'fecha_foto_gas',  width: 12 },
     { key: 'hora_foto_gas',   width: 11 },
     { key: 'foto_gas',        width: 9  },
-    // REVISIÓN (4 cols)
-    { key: 'estado',          width: 12 },
-    { key: 'alerta_ocr',      width: 12 },
-    { key: 'observaciones',   width: 35 },
-    { key: 'motivo_rechazo',  width: 26 },
+    // REVISIÓN (6 cols)
+    { key: 'estado',           width: 12 },
+    { key: 'alerta_ocr',       width: 12 },
+    { key: 'observaciones',    width: 35 },
+    { key: 'motivo_rechazo',   width: 26 },
+    { key: 'revisado_por',     width: 22 },
+    { key: 'fecha_revision',   width: 19 },
   ];
 
   // ── FILA 1: Encabezados de sección (celdas combinadas) ────
@@ -248,7 +254,7 @@ router.get('/excel', authMiddleware, requireRole('admin'), ah(async (req, res) =
     cell.border    = { bottom: { style: 'medium', color: { argb: 'FFE5E7EB' } } };
   });
 
-  ws.autoFilter = { from: { row: 2, column: 1 }, to: { row: 2, column: 47 } };
+  ws.autoFilter = { from: { row: 2, column: 1 }, to: { row: 2, column: 49 } };
 
   // ── FILAS DE DATOS ────────────────────────────────────────
   visitas.forEach((v, i) => {
@@ -318,6 +324,8 @@ router.get('/excel', authMiddleware, requireRole('admin'), ah(async (req, res) =
       alerta_ocr:      tieneAlerta ? 'Revisar' : '',
       observaciones:   v.observaciones  ?? '',
       motivo_rechazo:  v.motivo_rechazo ?? '',
+      revisado_por:    v.revisor        ?? '',
+      fecha_revision:  fmtFecha(v.revisado_en),
     });
 
     r.height = 17;
