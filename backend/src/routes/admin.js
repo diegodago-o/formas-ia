@@ -271,11 +271,17 @@ router.patch('/medidores/:id', ...isAdmin, ah(async (req, res) => {
     ? (motivo_rechazo_admin || null)
     : null;
 
-  // Recalcular delta cuando el admin confirma una lectura
+  // Datos del medidor actual: necesarios para delta propio y para cascada a visita siguiente
   const [[medActual]] = await pool.query(
-    'SELECT lectura_anterior FROM medidores WHERE id = ?',
+    `SELECT m.lectura_anterior, m.tipo, m.visita_id,
+            v.conjunto_id, v.apartamento, v.torre_id, v.fecha
+     FROM medidores m
+     JOIN visitas v ON v.id = m.visita_id
+     WHERE m.id = ?`,
     [req.params.id]
   );
+
+  // 1. Recalcular delta del medidor actual
   let nuevoDelta = undefined;
   if (lectura_confirmada && medActual?.lectura_anterior) {
     const numAnt = parseFloat(String(medActual.lectura_anterior).replace(',', '.'));
@@ -298,6 +304,39 @@ router.patch('/medidores/:id', ...isAdmin, ah(async (req, res) => {
     [lectura_confirmada || null, estado_revision_ocr || null, motivoMedidor, req.user.id,
      ...(nuevoDelta !== undefined ? [nuevoDelta] : []), req.params.id]
   );
+
+  // 2. Cascada: propagar la corrección al medidor de la visita inmediatamente siguiente
+  //    para que su lectura_anterior y delta reflejen la lectura corregida.
+  if (lectura_confirmada && medActual) {
+    const [[siguiente]] = await pool.query(
+      `SELECT m.id, m.lectura_confirmada
+       FROM medidores m
+       JOIN visitas v ON v.id = m.visita_id
+       WHERE v.conjunto_id = ?
+         AND v.apartamento = ?
+         AND (v.torre_id = ? OR (v.torre_id IS NULL AND ? IS NULL))
+         AND m.tipo = ?
+         AND v.fecha > ?
+         AND v.estado != 'anulada'
+       ORDER BY v.fecha ASC
+       LIMIT 1`,
+      [medActual.conjunto_id, medActual.apartamento,
+       medActual.torre_id || null, medActual.torre_id || null,
+       medActual.tipo, medActual.fecha]
+    );
+    if (siguiente) {
+      let deltaSig = null;
+      if (siguiente.lectura_confirmada) {
+        const n1 = parseFloat(String(lectura_confirmada).replace(',', '.'));
+        const n2 = parseFloat(String(siguiente.lectura_confirmada).replace(',', '.'));
+        if (!isNaN(n1) && !isNaN(n2)) deltaSig = parseFloat((n2 - n1).toFixed(3));
+      }
+      await pool.query(
+        'UPDATE medidores SET lectura_anterior = ?, delta = ?, primera_lectura = 0 WHERE id = ?',
+        [lectura_confirmada, deltaSig, siguiente.id]
+      );
+    }
+  }
 
   // ── Re-evaluación del estado de la visita ─────────────────────
   const [[med]] = await pool.query('SELECT visita_id FROM medidores WHERE id = ?', [req.params.id]);
