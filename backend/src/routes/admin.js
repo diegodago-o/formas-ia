@@ -271,6 +271,21 @@ router.patch('/medidores/:id', ...isAdmin, ah(async (req, res) => {
     ? (motivo_rechazo_admin || null)
     : null;
 
+  // Recalcular delta cuando el admin confirma una lectura
+  const [[medActual]] = await pool.query(
+    'SELECT lectura_anterior FROM medidores WHERE id = ?',
+    [req.params.id]
+  );
+  let nuevoDelta = undefined;
+  if (lectura_confirmada && medActual?.lectura_anterior) {
+    const numAnt = parseFloat(String(medActual.lectura_anterior).replace(',', '.'));
+    const numAct = parseFloat(String(lectura_confirmada).replace(',', '.'));
+    if (!isNaN(numAnt) && !isNaN(numAct)) {
+      nuevoDelta = parseFloat((numAct - numAnt).toFixed(3));
+    }
+  }
+
+  const deltaSet = nuevoDelta !== undefined ? ', delta = ?' : '';
   await pool.query(
     `UPDATE medidores
      SET lectura_confirmada   = COALESCE(?, lectura_confirmada),
@@ -278,9 +293,10 @@ router.patch('/medidores/:id', ...isAdmin, ah(async (req, res) => {
          motivo_rechazo_admin = ?,
          requiere_revision    = 0,
          revisado_por         = ?,
-         revisado_en          = NOW()
+         revisado_en          = NOW()${deltaSet}
      WHERE id = ?`,
-    [lectura_confirmada || null, estado_revision_ocr || null, motivoMedidor, req.user.id, req.params.id]
+    [lectura_confirmada || null, estado_revision_ocr || null, motivoMedidor, req.user.id,
+     ...(nuevoDelta !== undefined ? [nuevoDelta] : []), req.params.id]
   );
 
   // ── Re-evaluación del estado de la visita ─────────────────────

@@ -457,6 +457,8 @@ router.post('/:id/subsanar', authMiddleware, ah(async (req, res) => {
            motivo_calidad      = NULL,
            nota_ocr            = NULL,
            es_medidor          = 1,
+           sin_acceso          = 0,
+           motivo_sin_acceso   = NULL,
            requiere_revision   = 1,
            estado_revision_ocr = NULL,
            revisado_por        = NULL,
@@ -467,15 +469,28 @@ router.post('/:id/subsanar', authMiddleware, ah(async (req, res) => {
       ocrQueue.push({ medidorId: med.id, foto_path: datos.foto_path, tipo: med.tipo, lectura });
     } else if (lectura) {
       // Solo lectura nueva (sin foto) → corrección manual, sin OCR
+      // Recalcular delta con la nueva lectura
+      const [[medRow]] = await pool.query(
+        'SELECT lectura_anterior FROM medidores WHERE id = ?', [med.id]
+      );
+      let deltaManual = null;
+      if (medRow?.lectura_anterior) {
+        const numAnt = parseFloat(String(medRow.lectura_anterior).replace(',', '.'));
+        const numAct = parseFloat(String(lectura).replace(',', '.'));
+        if (!isNaN(numAnt) && !isNaN(numAct)) {
+          deltaManual = parseFloat((numAct - numAnt).toFixed(3));
+        }
+      }
       await pool.query(
         `UPDATE medidores SET
            lectura_confirmada  = ?,
+           delta               = ?,
            requiere_revision   = 0,
            estado_revision_ocr = 'corregido',
            revisado_por        = NULL,
            revisado_en         = NULL
          WHERE id = ?`,
-        [lectura, med.id]
+        [lectura, deltaManual, med.id]
       );
     }
   }
