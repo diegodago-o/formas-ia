@@ -399,12 +399,12 @@ export default function NewVisit() {
   };
 
   // ── Avanzar paso ──────────────────────────────────────────────────
-  const handleNext = async () => {
+  const handleNext = async (skipDuplicateCheck = false) => {
     setError('');
 
     if (step === 0) {
-      // Verificar duplicado si online
-      if (online) {
+      // Verificar duplicado si online (saltar si el usuario ya confirmó continuar)
+      if (online && !skipDuplicateCheck) {
         try {
           const params = new URLSearchParams({
             conjunto_id: conjuntoId,
@@ -798,10 +798,10 @@ export default function NewVisit() {
               ) : (
                 <div className={styles.duplicadoAcciones}>
                   <p className={styles.duplicadoTexto}>¿Deseas continuar de todas formas?</p>
-                  <button className={styles.btnDuplicadoContinuar} onClick={() => {
+                  <button className={styles.btnDuplicadoContinuar} onClick={async () => {
                     setDuplicadoIgnorado(true);
                     setDuplicado(null);
-                    setStep(s => s + 1);
+                    await handleNext(true);
                   }}>Sí, continuar</button>
                   <button className={styles.btnDuplicadoCancelar} onClick={() => setDuplicado(null)}>
                     Cancelar
