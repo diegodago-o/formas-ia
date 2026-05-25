@@ -123,7 +123,7 @@ export default function AdminDashboard() {
         >
           <span className={styles.metricIcon}>⚠️</span>
           <span className={styles.metricValue}>{loading ? '–' : s?.alertas_pendientes ?? 0}</span>
-          <span className={styles.metricLabel}>Alertas OCR pendientes</span>
+          <span className={styles.metricLabel}>Alertas OCR pendientes (Medidores)</span>
         </button>
 
         <button
@@ -153,6 +153,7 @@ export default function AdminDashboard() {
               <span className={styles.estadoIcon}>{meta.icon}</span>
               <span className={styles.estadoValue}>{loading ? '–' : s?.[key] ?? 0}</span>
               <span className={styles.estadoLabel}>{meta.label}</span>
+              <span className={styles.estadoSubLabel}>(Hogares)</span>
             </button>
           ))}
       </div>

@@ -85,9 +85,10 @@
 .estadoCard:hover  { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
 .estadoCard:active { transform: scale(0.97); }
 
-.estadoIcon  { font-size: 1.2rem; }
-.estadoValue { font-size: 1.8rem; font-weight: 800; color: var(--estado-color); line-height: 1; }
-.estadoLabel { font-size: 0.76rem; color: var(--text-muted); font-weight: 600; }
+.estadoIcon     { font-size: 1.2rem; }
+.estadoValue    { font-size: 1.8rem; font-weight: 800; color: var(--estado-color); line-height: 1; }
+.estadoLabel    { font-size: 0.76rem; color: var(--text-muted); font-weight: 600; }
+.estadoSubLabel { font-size: 0.68rem; color: var(--text-muted); font-weight: 400; opacity: 0.75; }
 
 /* ── Por ciudad → conjunto ─────────────────────────────── */
 .ciudadesTable {
