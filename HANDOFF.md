@@ -716,28 +716,76 @@ DB nombre:    lecturaia (puede diferir del local 'formas_ia')
 Proceso:      PM2 → lecturaia-api
 ```
 
-### Comando de despliegue completo
+### Comandos de despliegue
+
+Conectarse al servidor por SSH y ejecutar el comando según lo que cambió:
+
+---
+
+#### Deploy completo (frontend + backend + pm2) — comando de referencia
 
 ```bash
-# Conectarse al servidor por SSH, luego:
+cd /var/www/lecturaia && git pull origin master && npm install --prefix frontend && npm run build --prefix frontend && pm2 restart lecturaia-api --update-env
+```
+
+---
+
+#### Deploy solo backend (cambios en `backend/src/`)
+
+```bash
+cd /var/www/lecturaia && git pull origin master && pm2 restart lecturaia-api --update-env
+```
+
+> Usar cuando solo cambiaron archivos de Node.js (rutas, servicios, middlewares).  
+> NO incluye build del frontend.
+
+---
+
+#### Deploy solo frontend (cambios en `frontend/src/`)
+
+```bash
+cd /var/www/lecturaia && git pull origin master && npm install --prefix frontend && npm run build --prefix frontend
+```
+
+> El backend no se reinicia. Nginx sirve los nuevos archivos estáticos inmediatamente.
+
+---
+
+#### Deploy completo paso a paso (con verificación)
+
+```bash
+# 1. Ir al directorio del proyecto
 cd /var/www/lecturaia
 
-# Pull de cambios
+# 2. Bajar cambios del repositorio
 git pull origin master
 
-# Si cambiaron dependencias del backend:
+# 3. Instalar dependencias si cambiaron (package.json)
 npm install --prefix backend
-
-# Build del frontend (siempre que haya cambios en src/)
 npm install --prefix frontend
+
+# 4. Construir el frontend (genera /frontend/build/)
 npm run build --prefix frontend
 
-# Reiniciar backend
+# 5. Reiniciar el backend con las nuevas env vars
 pm2 restart lecturaia-api --update-env
 
-# Verificar que arrancó bien
-pm2 logs lecturaia-api --lines 20
+# 6. Verificar que el proceso arrancó correctamente
+pm2 status
+pm2 logs lecturaia-api --lines 30
 ```
+
+---
+
+#### Resumen de cuándo usar cada uno
+
+| Cambió | Comando |
+|--------|---------|
+| Solo `backend/src/**` | Deploy solo backend |
+| Solo `frontend/src/**` | Deploy solo frontend |
+| Ambos (o dudas) | Deploy completo |
+| Solo `.env` del servidor | `pm2 restart lecturaia-api --update-env` |
+| Cambió `backend/package.json` | Deploy completo + `npm install --prefix backend` |
 
 ### Nginx (reverse proxy)
 
@@ -853,6 +901,106 @@ openssl rand -base64 32
 - Configurar rotación de logs en PM2 o logrotate
 - Revisar que el directorio `uploads/` no sea listable por Nginx
 - El `.env` nunca debe commitearse a git (ya está en `.gitignore`)
+
+---
+
+## 14. Migración de GitHub a Azure DevOps
+
+El repositorio actual está en GitHub (`github.com/diegodago-o/formas-ia`). Para importarlo a Azure Repos:
+
+### Paso 1 — Crear proyecto en Azure DevOps
+
+1. Ir a [dev.azure.com](https://dev.azure.com)
+2. Crear organización (si no existe): `Tecnofactory` o similar
+3. Crear proyecto: `LecturIA` → visibilidad **Private** → Version control: **Git**
+
+### Paso 2 — Importar el repositorio
+
+1. Dentro del proyecto ir a **Repos → Files**
+2. Clic en **Import repository**
+3. Completar el formulario:
+   ```
+   Clone URL:  https://github.com/diegodago-o/formas-ia.git
+   Name:       formas-ia
+   ```
+4. Si el repo de GitHub es privado → marcar **"Requires authorization"** e ingresar un GitHub Personal Access Token (PAT) con permiso `repo`
+5. Clic en **Import** → Azure DevOps copia todo el historial, commits y rama `master`
+
+### Paso 3 — Actualizar el remote en tu máquina local
+
+```bash
+# Ver remote actual
+git remote -v
+# origin  https://github.com/diegodago-o/formas-ia.git
+
+# Reemplazar por la URL de Azure DevOps
+git remote set-url origin https://dev.azure.com/{organizacion}/LecturIA/_git/formas-ia
+
+# Verificar
+git remote -v
+
+# Primer push al nuevo remote
+git push origin master
+```
+
+### Paso 4 — Actualizar el servidor de producción
+
+```bash
+# En el servidor SSH:
+cd /var/www/lecturaia
+
+# Ver remote actual
+git remote -v
+
+# Cambiar al nuevo remote de ADO
+git remote set-url origin https://dev.azure.com/{organizacion}/LecturIA/_git/formas-ia
+
+# Para autenticarse desde el servidor usar un Personal Access Token de ADO:
+# git config credential.helper store
+# git pull  → pide usuario/PAT la primera vez, luego queda guardado
+
+# O usar SSH key de ADO (más seguro para servidores)
+```
+
+### Paso 5 — (Opcional) Crear pipeline CI/CD en ADO
+
+Si quieres que el deploy se haga automáticamente al hacer push, crear el archivo `azure-pipelines.yml` en la raíz del repo:
+
+```yaml
+# azure-pipelines.yml
+trigger:
+  branches:
+    include:
+      - master
+
+pool:
+  vmImage: ubuntu-latest
+
+steps:
+  - task: SSH@0
+    displayName: 'Deploy a producción'
+    inputs:
+      sshEndpoint: 'lecturaia-server'   # Service connection configurado en ADO
+      runOptions: 'inline'
+      inline: |
+        cd /var/www/lecturaia
+        git pull origin master
+        npm install --prefix frontend
+        npm run build --prefix frontend
+        pm2 restart lecturaia-api --update-env
+```
+
+Para configurar el `sshEndpoint`:
+1. ADO → **Project Settings → Service connections → New → SSH**
+2. Ingresar IP/host del servidor, usuario y clave privada SSH
+
+### Resumen de URLs después de la migración
+
+| Recurso | URL |
+|---------|-----|
+| Código (ADO) | `https://dev.azure.com/{org}/LecturIA/_git/formas-ia` |
+| Pipeline CI/CD | `https://dev.azure.com/{org}/LecturIA/_build` |
+| GitHub (puede archivarse) | `https://github.com/diegodago-o/formas-ia` |
 
 ---
 
